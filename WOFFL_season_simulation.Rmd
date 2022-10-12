@@ -1,0 +1,310 @@
+---
+title: "WOFFL_Season_Simulation"
+author: "Jeremy Patak"
+output: html_document
+---
+
+```{r}
+library(pacman)
+p_load(dplyr, readxl, janitor, tidyr, openxlsx)
+```
+
+```{r set up data}
+#create variable for season we want to simulate the rest of
+CurrentSeason = 2022
+#import data set
+SeasonGames = read_excel("~/Fantasy/AllGames.xlsx", sheet = "All Games") %>%
+  clean_names() %>%
+  filter(season==CurrentSeason) %>%
+  #remove extra things we don't need
+  select(week, team, score, opponent, opponent_score, result) %>%
+  mutate(score = ifelse(score==0, NA, score)) %>% mutate(opponent_score = ifelse(opponent_score==0, NA, opponent_score)) %>%
+  mutate(result = ifelse(is.na(score), NA, result))
+
+```
+
+```{r create divisions}
+divisions = data.frame(team = unique(SeasonGames$team)) %>% mutate(division = c("South", "South", "South", "North", "North", "North", "South", "South", "North", "North"))
+```
+
+```{r collect parameters for simulation}
+weeks_played = SeasonGames %>% filter(team=="Jeremy Patak") %>% filter(!is.na(score)) %>% nrow() %>% as.numeric()
+weeks_remaining = 13 - weeks_played
+total_weeks = weeks_played + weeks_remaining
+team_stats = SeasonGames %>% filter(!is.na(score)) %>% group_by(team) %>% summarise(mean = mean(score), sd = sd(score))
+
+for(w in 1:total_weeks){
+  colnamenew = paste("wk", w, sep = '')  
+  team_stats = team_stats %>% mutate(colname = NA) %>% rename(!!colnamenew := colname)
+  }
+
+for(t in 1:nrow(team_stats)){
+  TEAM = team_stats[[t, 1]]
+  team_games = SeasonGames %>% filter(team==TEAM)
+  #fill in the score for each team for weeks already played
+  for(wp in 1:weeks_played){
+    team_stats[t,wp+3] = team_games[wp, 3]
+  }
+}
+
+rm(team_games, colnamenew, t, TEAM, w, wp)
+```
+
+```{r create the simulation function}
+progress_bar = txtProgressBar(min=0, max=20000, style = 3, char="=")
+
+simulate_season = function(sg, ts, div, n){
+  all_sims = data.frame(sim_num = NA, team=NA, proj_PF=NA, proj_wins=NA, playoffs=NA, division_champ=NA, champion=NA); all_sims = all_sims[-1,]
+  for(i in 1:n){
+    #update the progress bar
+    setTxtProgressBar(progress_bar, value = i)
+    
+    #add some variation to mean and sd for each team
+    #the more weeks remaining, the more variation will be added
+    ts_alter = ts %>% mutate(sd = ifelse(sd<weeks_remaining*2, weeks_remaining*2, sd))
+    for(i in 1:nrow(ts_alter)){
+      ts_alter[[i,2]] = ts_alter[[i,2]] + rnorm(1, 0, (weeks_remaining+5)*2)
+    }
+    
+    #simulate rest of season points in ts
+    for(t in 1:nrow(ts_alter)){
+      MEAN = ts_alter[[t,2]]
+      SD = ts_alter[[t,3]]
+      for(w in (4+weeks_played):ncol(ts_alter)){
+        ts_alter[t,w] = rnorm(1, MEAN, SD)
+      }
+    }
+    
+    #add weekly scores into matchups df
+    ts_piv = ts_alter %>% select(!mean) %>% select(!sd) %>% pivot_longer(!team) %>% rename(week = name, score = value)
+    ts_piv$week = gsub("[A-z]","",ts_piv$week) %>% as.numeric()
+    #add team one score into df
+    sim_season = left_join(sg, ts_piv, by=c('team', 'week')) %>% 
+      select(week, team, score.y, opponent, opponent_score, result) %>% rename(score=score.y)
+    #add opponent score into df
+    sim_season = left_join(sim_season, ts_piv, by=c('opponent' = 'team', 'week' = 'week')) %>%
+      select(week, team, score.x, opponent, score.y, result) %>% rename(score = score.x, opponent_score = score.y)
+    #populate result column
+    sim_season = sim_season %>% mutate(result = ifelse(score>opponent_score, 1, 0))
+    
+    #make df with final wins and PF by division
+    season_i_res = sim_season %>% group_by(team) %>% summarise(wins = sum(result), PF = sum(score))
+    season_i_res = full_join(season_i_res, div, by='team')
+    north = season_i_res %>% filter(division=='North') %>% arrange(desc(wins))
+    south = season_i_res %>% filter(division=='South') %>% arrange(desc(wins))
+    
+    #tiebreakers for north division champ
+    if(north[[1,2]]==north[[2,2]]){
+      #in case of 3 way tie for the division
+      if(north[[2,2]]==north[[3,2]]){
+        tm1 = north[[1,1]]
+        tm2 = north[[2,1]]
+        tm3 = north[[3,1]]
+        tb = sim_season %>% filter(team==tm1 | team==tm2 | team==tm3) %>% filter(opponent==tm1 | opponent==tm2 | opponent==tm3) %>%
+          group_by(team) %>% summarise(tb_wins = sum(result)) %>% arrange(desc(tb_wins))
+        north = full_join(north, tb, by="team") %>% 
+          mutate(tb_wins = ifelse(is.na(tb_wins), 0, tb_wins)) %>% arrange(desc(wins), desc(tb_wins), desc(PF))
+      }
+      else{ #in case of a two way tie for the division
+      tm1 = north[[1,1]]
+      tm2 = north[[2,1]]
+      tb = sim_season %>% filter(team==tm1 | team==tm2) %>% filter(opponent==tm1 | opponent==tm2) %>%
+          group_by(team) %>% summarise(tb_wins = sum(result)) %>% arrange(desc(tb_wins))
+      north = full_join(north, tb, by="team") %>% 
+          mutate(tb_wins = ifelse(is.na(tb_wins), 0, tb_wins)) %>% arrange(desc(wins), desc(tb_wins), desc(PF))}
+    }
+    
+    #tiebreakers for south division champ
+    if(south[[1,2]]==south[[2,2]]){
+      #in case of 3 way tie for the division
+      if(south[[2,2]]==south[[3,2]]){
+        tm1 = south[[1,1]]
+        tm2 = south[[2,1]]
+        tm3 = south[[3,1]]
+        tb = sim_season %>% filter(team==tm1 | team==tm2 | team==tm3) %>% filter(opponent==tm1 | opponent==tm2 | opponent==tm3) %>%
+          group_by(team) %>% summarise(tb_wins = sum(result)) %>% arrange(desc(tb_wins))
+        south = full_join(south, tb, by="team") %>% 
+          mutate(tb_wins = ifelse(is.na(tb_wins), 0, tb_wins)) %>% arrange(desc(wins), desc(tb_wins), desc(PF))
+      }
+      else{ #in case of a two way tie for the division
+      tm1 = south[[1,1]]
+      tm2 = south[[2,1]]
+      tb = sim_season %>% filter(team==tm1 | team==tm2) %>% filter(opponent==tm1 | opponent==tm2) %>%
+          group_by(team) %>% summarise(tb_wins = sum(result)) %>% arrange(desc(tb_wins))
+      south = full_join(south, tb, by="team") %>% 
+          mutate(tb_wins = ifelse(is.na(tb_wins), 0, tb_wins)) %>% arrange(desc(wins), desc(tb_wins), desc(PF))}
+    }
+    
+    #crown the division champs
+    north$champ = NA
+    north[1,'champ'] = 1
+    north = north %>% mutate(champ = ifelse(champ==1, 1, 0)) %>% select(team, wins, PF, division, champ) %>% rename(division_champ = champ)
+    south$champ = NA
+    south[1,'champ'] = 1
+    south = south %>% mutate(champ = ifelse(champ==1, 1, 0)) %>% select(team, wins, PF, division, champ) %>% rename(division_champ = champ)
+    season_i_res = rbind(north, south) %>% mutate(division_champ = ifelse(is.na(division_champ), 0, division_champ))
+    
+    #tiebreakers for north division runner up
+    if(north[[2,2]]==north[[3,2]]){
+      #in case of 3 way tie for the division runner up
+      if(north[[3,2]]==north[[4,2]]){
+        tm1 = north[[2,1]]
+        tm2 = north[[3,1]]
+        tm3 = north[[4,1]]
+        tb2 = sim_season %>% filter(team==tm1 | team==tm2 | team==tm3) %>% filter(opponent==tm1 | opponent==tm2 | opponent==tm3) %>%
+          group_by(team) %>% summarise(tb2_wins = sum(result)) %>% arrange(desc(tb2_wins))
+        north = full_join(north, tb2, by="team") %>% 
+          mutate(tb2_wins = ifelse(is.na(tb2_wins), 0, tb2_wins)) %>% arrange(desc(wins), desc(tb2_wins), desc(PF))
+      }
+      else{ #in case of a two way tie for the division runner up
+      tm1 = north[[2,1]]
+      tm2 = north[[3,1]]
+      tb2 = sim_season %>% filter(team==tm1 | team==tm2) %>% filter(opponent==tm1 | opponent==tm2) %>%
+          group_by(team) %>% summarise(tb2_wins = sum(result)) %>% arrange(desc(tb2_wins))
+      north = full_join(north, tb2, by="team") %>% 
+          mutate(tb2_wins = ifelse(is.na(tb2_wins), 0, tb2_wins)) %>% arrange(desc(wins), desc(tb2_wins), desc(PF))}
+    }
+      
+    #tiebreakers for south division runner up
+    if(south[[2,2]]==south[[3,2]]){
+      #in case of 3 way tie for the division runner up
+      if(south[[3,2]]==south[[4,2]]){
+        tm1 = south[[2,1]]
+        tm2 = south[[3,1]]
+        tm3 = south[[4,1]]
+        tb2 = sim_season %>% filter(team==tm1 | team==tm2 | team==tm3) %>% filter(opponent==tm1 | opponent==tm2 | opponent==tm3) %>%
+          group_by(team) %>% summarise(tb2_wins = sum(result)) %>% arrange(desc(tb2_wins))
+        south = full_join(south, tb2, by="team") %>% 
+          mutate(tb2_wins = ifelse(is.na(tb2_wins), 0, tb2_wins)) %>% arrange(desc(division_champ), desc(wins), desc(tb2_wins), desc(PF))
+      }
+      else{ #in case of a two way tie for the division runner up
+      tm1 = south[[2,1]]
+      tm2 = south[[3,1]]
+      tb2 = sim_season %>% filter(team==tm1 | team==tm2) %>% filter(opponent==tm1 | opponent==tm2) %>%
+          group_by(team) %>% summarise(tb2_wins = sum(result)) %>% arrange(desc(tb2_wins))
+      south = full_join(south, tb2, by="team") %>% 
+          mutate(tb2_wins = ifelse(is.na(tb2_wins), 0, tb2_wins)) %>% arrange(desc(division_champ), desc(wins), desc(tb2_wins), desc(PF))}
+    }
+    
+    #name the other automatic playoff team
+    north$runnerup = NA
+    north[2,'runnerup'] = 1
+    north = north %>% mutate(runnerup = ifelse(runnerup==1, 1, 0)) %>% select(team, wins, PF, division, division_champ, runnerup) %>%
+      rename(division_runnerup = runnerup)
+    south$runnerup = NA
+    south[2,'runnerup'] = 1
+    south = south %>% mutate(champ = ifelse(runnerup==1, 1, 0)) %>% select(team, wins, PF, division, division_champ, runnerup) %>%
+      rename(division_runnerup = runnerup)
+    season_i_res = rbind(north, south) %>% mutate(division_champ = ifelse(is.na(division_champ), 0, division_champ)) %>% 
+      mutate(division_runnerup = ifelse(is.na(division_runnerup), 0, division_runnerup))
+    
+    #find the wildcard teams
+    #find wc1
+    pot_wc = season_i_res %>% filter(division_champ==0 & division_runnerup==0) %>% arrange(desc(wins))
+    #in case of tie for wc1
+    if(pot_wc[[1,2]]==pot_wc[[2,2]]){
+      #in case of 3 way tie for wc1
+      if(pot_wc[[2,2]]==pot_wc[[3,2]]){
+        tm1 = pot_wc[[1,1]]
+        tm2 = pot_wc[[2,1]]
+        tm3 = pot_wc[[3,1]]
+        tb_wc1 = sim_season %>% filter(team==tm1 | team==tm2 | team==tm3) %>% filter(opponent==tm1 | opponent==tm2 | opponent==tm3) %>%
+          group_by(team) %>% summarise(tb_wc1_wins = sum(result)) %>% arrange(desc(tb_wc1_wins))
+        pot_wc = full_join(pot_wc, tb_wc1, by="team") %>% 
+          mutate(tb_wc1_wins = ifelse(is.na(tb_wc1_wins), 0, tb_wc1_wins)) %>% arrange(desc(wins), desc(tb_wc1_wins), desc(PF))
+      }
+      else{ #in case of a two way tie for wc1
+      tm1 = pot_wc[[1,1]]
+      tm2 = pot_wc[[2,1]]
+      tb_wc1 = sim_season %>% filter(team==tm1 | team==tm2) %>% filter(opponent==tm1 | opponent==tm2) %>%
+          group_by(team) %>% summarise(tb_wc1_wins = sum(result)) %>% arrange(desc(tb_wc1_wins))
+      pot_wc = full_join(pot_wc, tb_wc1, by="team") %>% 
+          mutate(tb_wc1_wins = ifelse(is.na(tb_wc1_wins), 0, tb_wc1_wins)) %>% arrange(desc(wins), desc(tb_wc1_wins), desc(PF))}
+    }
+    pot_wc$wc1 = NA
+    pot_wc[1,'wc1'] = 1
+    #find wc2
+    wc2 = pot_wc %>% filter(is.na(wc1)) %>% arrange(desc(PF))
+    wc2$wc2 = NA
+    wc2[1,'wc2'] = 1
+    pot_wc = full_join(pot_wc, wc2, by='team') %>% select(team, wc1.x, wc2) %>% rename(wc1=wc1.x)
+    season_i_res = left_join(season_i_res, pot_wc, by="team") %>% 
+      mutate(wc1 = ifelse(is.na(wc1), 0, wc1)) %>% mutate(wc2 = ifelse(is.na(wc2), 0, wc2))
+    
+    #make binary variable for making the playoffs
+    season_i_res$playoffs = season_i_res$division_champ+season_i_res$division_runnerup+season_i_res$wc1+season_i_res$wc2
+    
+    #find which runner up is seeded higher
+    runnerups = season_i_res %>% filter(division_runnerup==1)
+    
+    h2h_ru = sim_season %>% filter(team==runnerups[[1,1]] | team==runnerups[[2,1]]) %>% 
+      filter(opponent==runnerups[[1,1]] | opponent==runnerups[[2,1]]) %>%
+      group_by(team) %>% summarise(h2h_wins = sum(result)) %>% arrange(desc(h2h_wins))
+    h2h_ru = left_join(h2h_ru, season_i_res, by="team") %>% arrange(desc(wins), desc(h2h_wins), desc(PF))
+    
+    #collect teams and stats for the teams that qualify for rd 1
+    tm3 = h2h_ru[[1,1]]
+    stats3 = team_stats %>% filter(team==tm3); mean3 = stats3[[1,2]]; sd3 = stats3[[1,3]]
+    tm4 = h2h_ru[[2,1]]
+    stats4 = team_stats %>% filter(team==tm4); mean4 = stats4[[1,2]]; sd4 = stats4[[1,3]]
+    tm1 = season_i_res %>% filter(division_champ==1 & division==h2h_ru[[1,5]]); tm1 = tm1[[1,1]]
+    stats1 = team_stats %>% filter(team==tm1); mean1 = stats1[[1,2]]; sd1 = stats1[[1,3]]
+    tm2 = season_i_res %>% filter(division_champ==1 & division==h2h_ru[[2,5]]); tm2 = tm2[[1,1]]
+    stats2 = team_stats %>% filter(team==tm2); mean2 = stats2[[1,2]]; sd2 = stats2[[1,3]]
+    tm5 = season_i_res %>% filter(wc1==1); tm5 = tm5[[1,1]]
+    stats5 = team_stats %>% filter(team==tm5); mean5 = stats5[[1,2]]; sd5 = stats5[[1,3]]
+    tm6 = season_i_res %>% filter(wc2==1); tm6 = tm6[[1,1]]
+    stats6 = team_stats %>% filter(team==tm6); mean6 = stats6[[1,2]]; sd6 = stats6[[1,3]]
+    
+    #create rd1 matchups
+    gm1 = data.frame(team1=tm3, score1=rnorm(1, mean3, sd3), team2=tm6, score2=rnorm(1, mean6, sd6))
+    gm2 = data.frame(team1=tm4, score1=rnorm(1, mean4, sd4), team2=tm5, score2=rnorm(1, mean5, sd5))
+    
+    #create rd2 matchups
+    gm3 = data.frame(team1=tm1, score1=rnorm(1, mean1, sd1), team2= ifelse(gm2$score1>gm2$score2, gm2$team1, gm2$team2), 
+                     score2=rnorm(1, ifelse(gm2$score1>gm2$score2, mean4, mean5), ifelse(gm2$score1>gm2$score2, sd4, sd5)))
+    gm4 = data.frame(team1=tm2, score1=rnorm(1, mean2, sd2), team2= ifelse(gm1$score1>gm2$score2, gm1$team1, gm1$team2), 
+                     score2=rnorm(1, ifelse(gm1$score1>gm1$score2, mean3, mean6), ifelse(gm1$score1>gm1$score2, sd3, sd6)))
+    
+    #create championship matchup
+    gm5 = data.frame(team1=ifelse(gm3$score1>gm3$score2, gm3$team1, gm3$team2), score1=NA, 
+                     team2=ifelse(gm4$score1>gm4$score2, gm4$team1, gm4$team2), score2=NA)
+    c_team1_stats = team_stats %>% filter(team==gm5$team1)
+    c_team2_stats = team_stats %>% filter(team==gm5$team2)
+    gm5$score1 = rnorm(1, c_team1_stats[[1,2]], c_team1_stats[[1,3]])
+    gm5$score2 = rnorm(1, c_team2_stats[[1,2]], c_team2_stats[[1,3]])
+    
+    #add champion to season results df
+    champ = data.frame(team = ifelse(gm5$score1>gm5$score2, gm5$team1, gm5$team2), champ=1)
+    season_i_res = left_join(season_i_res, champ, by="team") %>% mutate(champ = ifelse(is.na(champ), 0, champ))
+    
+    #add this sim to a df with all sims
+    this_sim = data.frame(sim_num = rep(i, 10), team=season_i_res$team, proj_PF=season_i_res$PF, proj_wins=season_i_res$wins, 
+                          playoffs=season_i_res$playoffs, division_champ=season_i_res$division_champ, champion=season_i_res$champ)
+    all_sims = rbind(all_sims, this_sim)
+    }
+  results= all_sims %>% group_by(team) %>% summarise(proj_wins = mean(proj_wins),
+                                                     proj_PF = mean(proj_PF),
+                                                     playoff_liklihood = mean(playoffs),
+                                                     division_champ_likilhood = mean(division_champ),
+                                                     champion_liklihood = mean(champion))
+  close(progress_bar)
+  return(results)
+}
+```
+
+```{r run the simulation}
+
+simmed_seasons = simulate_season(SeasonGames, team_stats, divisions, 20000)
+
+
+```
+
+```{r export results}
+#write.xlsx(simmed_seasons, "~/Fantasy/2022/rankings.xlsx", colnames=T)
+
+wb = loadWorkbook("~/Fantasy/2022/rankings/rankings.xlsx")
+addWorksheet(wb, "Wk5")
+writeData(wb, sheet = "Wk5", x=simmed_seasons)
+saveWorkbook(wb, "~/Fantasy/2022/rankings/rankings.xlsx", overwrite = T)
+```

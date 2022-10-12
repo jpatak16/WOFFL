@@ -1,0 +1,647 @@
+---
+title: "WOFFL DA"
+author: "Jeremy Patak"
+output: pdf_document
+---
+
+```{r}
+library(pacman)
+p_load(dplyr, stargazer, data.table, formattable, tidyr, ggplot2, readxl, gganimate, janitor, magrittr, kableExtra)
+```
+
+```{r}
+#import data set
+AllGames = read_excel("~AllGames.xlsx", sheet = "All Games") %>%
+  clean_names() %>% relocate(projection, .before = score) %>% select(-starts_with("vs_tm_"))
+#find current season and current week
+CS = unique(AllGames$season); CS = CS[1] + length(CS) - 1
+CW = AllGames %>% filter(season==CS) %>% filter(!is.na(score)) %>% filter(score>0) %>% arrange(desc(week)); CW = CW[[1,3]]
+#remove unplayed games
+AllGames = AllGames %>% filter(season<CS | (season==CS & week<=CW))
+
+rm(CS, CW)
+```
+
+```{r}
+###find record for each team each week
+
+#create columns for records at the time of the matchup
+AllGames = AllGames %>% mutate(team_wins = NA, team_losses = NA, opponent_wins = NA, opponent_losses = NA)
+#moves columns to relevant order
+AllGames = AllGames %>% relocate(team_wins, .after = team) %>% relocate(team_losses, .after = team_wins) %>%
+  relocate(opponent_wins, .after = opponent) %>% relocate(opponent_losses, .after = opponent_wins)
+#populate columns with records
+for(r in 1:nrow(AllGames)){
+  #save info needed to find record for each row
+  Team = AllGames[[r, 'team']]
+  Opponent = AllGames[[r, 'opponent']]
+  Season = AllGames[[r, 'season']]
+  Week = AllGames[[r, 'week']]
+  #find record for team
+  prior_games_t = AllGames %>% filter(season==Season) %>% filter(team==Team) %>% filter(week<Week)
+  prior_win_t = prior_games_t %>% filter(result==1) %>% nrow() %>% as.numeric()
+  prior_loss_t = prior_games_t %>% filter(result==0) %>% nrow() %>% as.numeric()
+  #find record for opponent
+  prior_games_o = AllGames %>% filter(season==Season) %>% filter(team==Opponent) %>% filter(week<Week)
+  prior_win_o = prior_games_o %>% filter(result==1) %>% nrow() %>% as.numeric()
+  prior_loss_o = prior_games_o %>% filter(result==0) %>% nrow() %>% as.numeric()
+  #populate record cells
+  AllGames[r, 'team_wins'] = prior_win_t
+  AllGames[r, 'team_losses'] = prior_loss_t
+  AllGames[r, 'opponent_wins'] = prior_win_o
+  AllGames[r, 'opponent_losses'] = prior_loss_o
+}
+
+rm(Team, Opponent, Season, Week, prior_games_t, prior_win_t, prior_loss_t, prior_games_o, prior_win_o, prior_loss_o, r)
+```
+
+
+### Find Lowest Scores Ever
+```{r} 
+#find lowest scores ever
+lowest = AllGames %>% arrange(score)
+lowest = lowest %>% select(season, week, reg_po, team, score)
+lowest = lowest[1:5,]
+
+lowest %>% kable(col.names = c("Season", "Week", "Regular Season / Playoffs", "Team", "Score"),
+          caption = "<span style='font-size:50px'><center>Lowest Scores in a Single Week<center></span>",
+          align = 'c') %>%
+    kable_styling(full_width = F) %>% 
+    column_spec(3, border_right = T)
+
+rm(lowest)
+```
+
+
+### How Many of the Lowest Scores Does Each Team Have
+```{r}
+#find 50 lowest scores ever and count occurrences by team
+lowest = AllGames %>% arrange(score) %>% select(season, week, reg_po, team, score)
+lowest = lowest[1:50,] %>% count(team, sort = T)
+
+#find the 50th lowest score ever
+lowest50th = AllGames %>% arrange(score) %>% select(season, week, reg_po, team, score) ; lowest50th = lowest50th[[50,5]]
+
+#abbreviate team names so they fit on the plot nicer
+lowest$team = abbreviate(lowest$team, minlength = 2, strict = F)
+
+#plot
+ggplot(data=lowest) +
+  geom_col(mapping= aes(x=reorder(team, -n), y=n, fill=team)) +
+  ggtitle('Who has Accounted for the Most Bottom-50 Scores?', paste('The 50th worst score ever was ', lowest50th, ' points.'))+
+  xlab('Team') + ylab('Number of Bottom-50 Scores') + theme(legend.position = 'none')
+
+rm(lowest, lowest50th)
+```
+
+```{r}
+#find 50 lowest scores since 2017 and count occurrences by team
+lowest = AllGames %>% filter(season>=2017) %>% arrange(score) %>% select(season, week, reg_po, team, score)
+lowest = lowest[1:50,] %>% count(team, sort = T)
+
+#find the 50th lowest score ever
+lowest50th = AllGames %>% filter(season>=2017) %>% arrange(score) %>% select(season, week, reg_po, team, score)
+lowest50th = lowest50th[[50,5]]
+
+#abbreviate team names so they fit on the plot nicer
+lowest$team = abbreviate(lowest$team, minlength = 2, strict = F)
+
+#plot
+ggplot(data=lowest) +
+  geom_col(mapping= aes(x=reorder(team, -n), y=n, fill=team)) +
+  ggtitle('Who has Accounted for the Most Bottom-50 Scores Since 2017?', 
+          paste('The 50th worst score since 2017 was ', lowest50th, ' points.')) +
+  xlab('Team') + ylab('Number of Bottom-50 Scores') + theme(legend.position = 'none')
+
+rm(lowest, lowest50th)
+```
+
+
+### Average Points Scored Per Season
+```{r}
+#Total points per season
+SeasonPoints = AllGames %>% filter(!is.na(score)) %>% group_by(season) %>% summarize(totalpoints = sum(score))
+#total games per season
+SeasonGames = AllGames %>% group_by(season) %>% count(result) %>% filter(result==1) %>% mutate(n = n*2) %>% select(season, n)
+#combine both df and find ppg
+SeasonPoints = left_join(SeasonPoints, SeasonGames, by='season') %>% mutate(ppg = totalpoints/n)
+#make the season variable a factor
+SeasonPoints$season = as.factor(SeasonPoints$season)
+
+ggplot(data = SeasonPoints) + geom_col(mapping = aes(x=season, y=ppg, fill=season)) +
+  ggtitle('WOFFL PPG by Season')+
+  xlab('Season') + ylab('PPG') + theme(legend.position = 'none')
+
+rm(SeasonPoints, SeasonGames)
+```
+
+
+### Percentage of Points Scored in a Season
+```{r}
+SeasonPoints = AllGames %>% filter(!is.na(score)) %>% group_by(season) %>% summarize(totalpoints = sum(score))
+
+#create empty df to fill with desired variables
+percentages = data.frame(team=0, season= 0, points=0, percentageOfSeasonPoints=0)
+for(i in 1:length(SeasonPoints$season)) {
+  #create df with all games in a given season
+  SeasonGames = filter(AllGames, season==i+2012)
+  #find a list of what players played in a given season
+  SeasonPlayers = unique(SeasonGames$team)
+  for(j in 1:length(SeasonPlayers)) {
+    #find all games played by each player in a given season
+    SeasonGamesByPlayer = filter(SeasonGames, team==SeasonPlayers[j])
+    #populate row with data we are looking for
+    row = c(SeasonPlayers[j], SeasonGames$season[1], sum(SeasonGamesByPlayer$score, na.rm=TRUE), round(sum(SeasonGamesByPlayer$score, na.rm=TRUE)/SeasonPoints[i,2],4)*100)
+    #add row to the bottom of our df
+    percentages[nrow(percentages) + 1, ] = row
+  }
+}
+
+#get rid of the first empty row
+percentages = percentages[-1,]
+
+#turn points and percentages variables into numeric values
+percentages$points = as.numeric(percentages$points)
+percentages$percentageOfSeasonPoints = as.numeric(percentages$percentageOfSeasonPoints)
+
+#remove seth and nike's split team from 2016
+percentages = percentages %>% filter(!(season==2016 & team=="Nike Simmons" | season==2016 & team=="Seth Lassiter"))
+
+#order by percent and put into table
+percentages %<>% arrange(percentageOfSeasonPoints)
+formattable(percentages[1:10,],
+            align = 'l')
+
+#percentages sorted the other way
+percentages %<>% arrange(desc(percentageOfSeasonPoints))
+formattable(percentages[1:10,],
+            align = 'l')
+```
+
+
+### How often does each Team Score More Than 10% of the Season Point Total
+```{r}
+#find how many times each team got more than 10 percent in a season
+allteams = unique(AllGames$team)
+over10 = data.frame(team=unique(AllGames$team), SeasonsOver10=0, TotalSeasons=0)
+for(k in 1:length(allteams)){
+  #filter percentage df to team of interest
+  namefilter= filter(percentages, team==allteams[k])
+  #populate how many times the given team played a season
+  over10[k,3]= nrow(namefilter)
+  #filter the teams seasons to only seasons where they scored more than 10% of the points
+  namefilter2 = filter(namefilter, percentageOfSeasonPoints>10)
+  #populate the df with how many times they scored more than 10% of the points
+  over10[k,2]= nrow(namefilter2)
+}
+
+#create a new column showing percent of times each team scored more than 10% of the total points
+over10$percent = round(over10$SeasonsOver10 / over10$TotalSeasons , 4) * 100
+over10 = over10 %>% arrange(desc(percent))
+formattable(over10,
+            align = 'l')
+
+rm(namefilter, namefilter2, over10, percentages, row, SeasonGames, SeasonGamesByPlayer, SeasonPoints, allteams, i, j, k, SeasonPlayers)
+```
+
+### Current Overall Wins Standings
+```{r}
+#create empty df for wins by week data
+wins_by_week = data.frame(Wk=NA, Team=NA, Wins=NA)[0,]
+
+#the for loop will populate the wins by week data frame one team at a time
+for(t in unique(AllGames$team)){
+  #empty data frame for each team to start with
+  wins_by_week_t = data.frame(wk=NA, team=NA, wins=NA)[0,]
+  #find all games played by each team
+  list_games = AllGames %>% filter(team==t)
+  #populate first row of wins by week data frame
+  wins_by_week_t[1,] = c(1, t, ifelse(list_games$ov_wk[1]==1,
+                                      list_games$result[1],
+                                      0))
+  #for loop to populate the rest of the rows
+  for(w in 2:max(AllGames$ov_wk)){
+    #find game for team t in week w
+    game = list_games %>% filter(ov_wk==w)
+    #decides if team t played a game in week w or not
+    pg = ifelse(nrow(game)>0, 
+                ifelse(is.na(game$opponent), 0, 1), 0)
+    #decides if team t won in week w or not
+    win = as.numeric(ifelse(pg>0, game$result[1], 0))
+    #figures out how many all time wins team t already had
+    previous_wins = as.numeric(wins_by_week_t[w-1,3])
+    #populates the row for week w based on how many wins team t has now
+    wins_by_week_t[w,] = c(w, t, previous_wins+win)
+  }
+  #combines all teams into one df
+  wins_by_week = rbind(wins_by_week, wins_by_week_t)
+}
+
+wins_by_week$wk = as.numeric(wins_by_week$wk)
+wins_by_week$wins = as.numeric(wins_by_week$wins)
+
+rm(game, list_games, wins_by_week_t, pg, previous_wins, t, w, win)
+```
+
+```{r}
+#plot wins by week
+wins_by_week = wins_by_week %>%
+  #add current rank for each team each week
+  group_by(wk) %>%
+  mutate(rank = rank(-wins, ties.method = "first"),
+         Value_rel = wins/wins[rank==1]) %>%
+  filter(rank<=11)
+
+staticplot = ggplot(wins_by_week, aes(rank, group = team,
+                fill = as.factor(team), color = as.factor(team))) +
+  geom_tile(aes(y = wins/2,
+                height = wins,
+                width = 0.9), alpha = 0.8, color = NA) +
+  geom_text(aes(y = 0, label = paste(team, " ")), vjust = 0.2, hjust = 1) +
+  geom_text(aes(y=wins, label = scales::number(as.numeric(wins), acc = 1)), hjust=0) +
+  coord_flip(clip = "off", expand = FALSE) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_reverse() +
+  guides(color = FALSE, fill = FALSE) +
+  theme(axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+         axis.title.y=element_blank(),
+        legend.position="none",
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        panel.grid.major.x = element_line( size=.1, color="grey" ),
+        panel.grid.minor.x = element_line( size=.1, color="grey" ),
+        plot.title=element_text(size=25, hjust=0.5, face="bold", colour="grey", vjust=-1),
+        plot.subtitle=element_text(size=18, hjust=0.5, face="italic", color="grey"),
+        plot.caption =element_text(size=8, hjust=0.5, face="italic", color="grey"),
+        plot.background=element_blank(),
+        plot.margin = margin(2,2, 2, 4, "cm"))
+
+anim = staticplot + transition_states(wk, transition_length = 4, state_length = 1) +
+  view_follow(fixed_x = TRUE)  +
+  labs(title = 'WOFFL All Time Wins Race',
+       subtitle  =  "Weeks since 2013 Season Started : {closest_state}")
+
+#animate the bar graph
+#animate(anim, 600, fps = 20, duration = 30,  width = 1200, height = 1000, renderer = gifski_renderer("gganim.gif"))
+
+rm(anim, staticplot, wins_by_week)
+```
+
+```{r}
+#static version of the plot
+AllTimeWins = AllGames %>% group_by(team) %>% summarise(wins = sum(result, na.rm = T)) %>% arrange(desc(wins))
+AllTimeWins = AllTimeWins[1:10,]
+
+ggplot(AllTimeWins) + geom_col(aes(x=reorder(team, wins), y=wins, fill=team)) +
+  coord_flip() + theme(legend.position = 'none') + xlab("") + ylab("All-Time Wins") +
+  ggtitle("WOFFL All-Time Wins Leaders")
+
+rm(AllTimeWins)
+```
+
+### Current Wins Standings Since 2017
+```{r}
+#create empty df for wins by week data
+wins_by_week = data.frame(Wk=NA, Team=NA, Wins=NA)[0,]
+
+#make the final product be since 2017
+Since2017 = AllGames %>% filter(season>=2017)
+
+#the for loop will populate the wins by week data frame one team at a time
+for(t in unique(Since2017$team)){
+  #empty data frame for each team to start with
+  wins_by_week_t = data.frame(wk=NA, team=NA, wins=NA)[0,]
+  #find all games played by each team
+  list_games = Since2017 %>% filter(team==t)
+  #populate first row of wins by week data frame
+  wins_by_week_t[1,] = c(1, t, ifelse(list_games$ov_wk[1]==61,
+                                      list_games$result[1],
+                                      0))
+  #for loop to populate the rest of the rows
+  for(w in 62:max(Since2017$ov_wk)){
+    #find game for team t in week w
+    game = list_games %>% filter(ov_wk==w)
+    #decides if team t played a game in week w or not
+    pg = ifelse(nrow(game)>0, 
+                ifelse(is.na(game$opponent), 0, 1), 0)
+    #decides if team t won in week w or not
+    win = as.numeric(ifelse(pg>0, game$result[1], 0))
+    #figures out how many all time wins team t already had
+    previous_wins = as.numeric(wins_by_week_t[w-61,3])
+    #populates the row for week w based on how many wins team t has now
+    wins_by_week_t[w-60,] = c(w-60, t, previous_wins+win)
+  }
+  #combines all teams into one df
+  wins_by_week = rbind(wins_by_week, wins_by_week_t)
+}
+
+wins_by_week$wk = as.numeric(wins_by_week$wk)
+wins_by_week$wins = as.numeric(wins_by_week$wins)
+
+rm(game, list_games, wins_by_week_t, pg, previous_wins, t, w, win)
+```
+
+```{r}
+#plot wins by week
+wins_by_week = wins_by_week %>%
+  #add current rank for each team each week
+  group_by(wk) %>%
+  mutate(rank = rank(-wins, ties.method = "first"),
+         Value_rel = wins/wins[rank==1]) %>%
+  filter(rank<=11)
+
+staticplot = ggplot(wins_by_week, aes(rank, group = team,
+                fill = as.factor(team), color = as.factor(team))) +
+  geom_tile(aes(y = wins/2,
+                height = wins,
+                width = 0.9), alpha = 0.8, color = NA) +
+  geom_text(aes(y = 0, label = paste(team, " ")), vjust = 0.2, hjust = 1) +
+  geom_text(aes(y=wins, label = scales::number(as.numeric(wins), acc = 1)), hjust=0) +
+  coord_flip(clip = "off", expand = FALSE) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_reverse() +
+  guides(color = FALSE, fill = FALSE) +
+  theme(axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+         axis.title.y=element_blank(),
+        legend.position="none",
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        panel.grid.major.x = element_line( size=.1, color="grey" ),
+        panel.grid.minor.x = element_line( size=.1, color="grey" ),
+        plot.title=element_text(size=25, hjust=0.5, face="bold", colour="grey", vjust=-1),
+        plot.subtitle=element_text(size=18, hjust=0.5, face="italic", color="grey"),
+        plot.caption =element_text(size=8, hjust=0.5, face="italic", color="grey"),
+        plot.background=element_blank(),
+        plot.margin = margin(2,2, 2, 4, "cm"))
+
+anim = staticplot + transition_states(wk, transition_length = 4, state_length = 1) +
+  view_follow(fixed_x = TRUE)  +
+  labs(title = 'WOFFL Wins Since the Start of 2017 Season',
+       subtitle  =  "Weeks since 2017 Season Started : {closest_state}")
+
+#animate the bar graph
+#animate(anim, 600, fps = 20, duration = 30,  width = 1200, height = 1000, renderer = gifski_renderer("gganim.gif"))
+
+rm(anim, staticplot, wins_by_week)
+```
+
+```{r}
+#static version of the plot
+WinsSince2017 = Since2017 %>% group_by(team) %>% summarise(wins = sum(result, na.rm = T)) %>% arrange(desc(wins))
+WinsSince2017 = WinsSince2017[1:10,]
+
+ggplot(WinsSince2017) + geom_col(aes(x=reorder(team, wins), y=wins, fill=team)) +
+  coord_flip() + theme(legend.position = 'none') + xlab("") + ylab("Wins Since 2017") +
+  ggtitle("WOFFL Win Leaders Since 2017")
+
+rm(WinsSince2017)
+```
+
+### Wk1 Scores vs Season PF
+```{r}
+#creates df of teams that have won a championship
+champ = AllGames %>% group_by(season) %>% filter(week==15 | week==16 & season>=2021) %>% filter(!(week==15 & season>=2021)) %>% filter(elim=="Yes") %>% group_by(team, season) %>% summarize(championship = sum(result)) %>% filter(championship==1)
+
+#creates a df of all Wk1 performances excluding any ongoing season
+Wk1 = AllGames %>% filter(week==1) %>% filter(season %in% champ$season) %>%
+  select(season, team, score)
+#drop 2016 Nike because he didn't finish the season
+Wk1 = Wk1[!(Wk1$team=='Nike Simmons' & Wk1$season==2016),]
+
+#creates a df of PF for each team each season
+#removes week 13 in 2021 because all other seasons had only 12 weeks
+#doesn't include the 2022 season because it is still ongoing
+SeasonTotal = AllGames %>% filter(AllGames[,'reg_po']=="Regular Season") %>% filter (week <= 13) %>% filter(!is.na(score)) %>% group_by(team, season) %>% summarize(ppg= mean(score)) %>% filter(season %in% champ$season)
+#removes observations for Seth and Nike in 2016 since they split a team
+SeasonTotal = SeasonTotal[!(SeasonTotal$team=='Nike Simmons' & SeasonTotal$season==2016),]
+SeasonTotal = SeasonTotal[!(SeasonTotal$team=='Seth Lassiter' & SeasonTotal$season==2016),]
+
+#combines the championship, Wk1, and season total dfs
+Wk1_PF = left_join(Wk1, SeasonTotal, by=c('season'='season', 'team'='team'))
+Wk1_PF = left_join(Wk1_PF, champ, by=c('season'='season', 'team'='team'))
+Wk1_PF = Wk1_PF %>% mutate(championship = ifelse(is.na(championship), 0, 1)) #assigns a 0 to teams that didn't win a championship
+
+#plots Wk1 score vs season PF
+ggplot(Wk1_PF, mapping = aes(x=ppg, y=score)) + geom_point(aes(color=as.factor(championship))) + geom_smooth(method = 'lm', se=FALSE) +
+  ggtitle("Does Week 1 Score Correlate to Regular Season Points Total?") + xlab("Season Points Total") + ylab('Week 1 Score') +
+  theme_light() +
+  scale_color_manual(values = c("0" = "black", "1" = "gold")) +
+  theme(legend.position = 'none')
+
+rm(Wk1_PF, SeasonTotal, Wk1)  
+```
+
+
+### Highest/Lowest Scoring in a Week with X overall Wins
+```{r}
+scoring_records_by_weekly_placement = function(pos, highest=TRUE, n=5){
+  pos = pos-1
+  #players who scored the xth amount of points in a week
+  filtered = AllGames %>% filter(overall_losses==pos)
+  #orders rows
+  filtered = filtered[order(filtered$score, decreasing = highest),]
+  #takes out rows with bye weeks
+  filtered = filtered %>% mutate(overall_games = overall_wins + overall_losses) %>% filter(overall_games==9)
+  #takes the top n rows
+  filtered = filtered[1:n,]
+  #picks the columns we want in our table and changes column names to upper case
+  filtered = filtered %>% select(team, season, week, score, result) %>% mutate(result = ifelse(result==1, "Win", "Loss"))
+  names(filtered) <- toupper(names(filtered))
+  
+  #correct number sound for pos in title
+  if(pos+1==1){sound = "st "}
+  else if(pos+1==2){sound = "nd "}
+  else if(pos+1==3){sound = "rd "}
+  else{sound = "th "}
+  
+  #creates a caption for our table
+  capt = paste("<span style='font-size:30px'><center>", ifelse(highest==TRUE, "Highest", "Lowest"), " Ever Scores by the ", pos+1, 
+               sound, "Highest Scoring Team of the Week<center></span>", sep = "")
+  
+  #formats our table
+  filtered %>% 
+    kable(caption = capt) %>%
+    kable_styling(full_width = F) %>% 
+    column_spec(4, bold = T, border_left = T, border_right = T) %>% 
+    column_spec(5, background = ifelse(filtered$RESULT=='Win', "Green", "Red"))
+}
+
+scoring_records_by_weekly_placement(pos = 2, highest = FALSE, n=10)
+```
+
+
+
+### Worst Start Through x Weeks
+```{r}
+worst_start = function(weeks, n=5){
+  #gets a list of all teams that played each season and their total points for the season
+  worst_starts = AllGames %>% filter(AllGames$reg_po == "Regular Season") %>% 
+    group_by(team, season) %>% summarize(Reg_Season_Points=sum(score))
+  #removes observations for Seth and Nike in 2016 since they split a team
+  worst_starts = worst_starts[!(worst_starts$team=='Nike Simmons' & worst_starts$season==2016),]
+  worst_starts = worst_starts[!(worst_starts$team=='Seth Lassiter' & worst_starts$season==2016),]
+  
+  games_played = c()
+  bad_starts = c()
+  wins = c()
+  for(r in 1:nrow(worst_starts)){
+    team_var = worst_starts[[r,1]]
+    season_var = worst_starts[[r,2]]
+    games = AllGames %>% filter(team==team_var) %>% filter(season==season_var) %>% filter(reg_po == "Regular Season")
+    gp = as.numeric(nrow(games))
+    games_played[r] = gp
+    first_weeks = games %>% filter(week<=weeks)
+    n_weeks_total_score = sum(first_weeks$score)
+    n_weeks_wins = sum(first_weeks$result)
+    bad_starts[r] = n_weeks_total_score
+    wins[r] = n_weeks_wins
+  }
+  worst_starts$points_in_first_n_weeks = bad_starts
+  worst_starts$wins_in_first_n_weeks = wins
+  worst_starts$gp = games_played
+  worst_starts$Reg_Season_PPG = round(worst_starts$Reg_Season_Points / worst_starts$gp, digits=1)
+  worst_starts = worst_starts %>% filter(gp>=weeks) %>% mutate(Reg_Season_PPG = ifelse(gp==weeks, NA, Reg_Season_PPG)) %>% 
+    select(team, season, points_in_first_n_weeks, wins_in_first_n_weeks, Reg_Season_PPG)
+  worst_starts = worst_starts[order(worst_starts$points_in_first_n_weeks, decreasing = FALSE),]
+  worst_starts = worst_starts[1:n,]
+  
+  worst_starts %>% 
+    kable(col.names = c("Team", "Season", paste("PTS through ", weeks, " Weeks", sep = ""), paste("Wins through ", weeks, " Weeks", sep = ""),
+                        "Regular Season PPG"),
+          caption = paste("<span style='font-size:50px'><center>Worst Ever Starts to a Season Through Week ", weeks, "<center></span>", 
+                          sep = "")) %>%
+    kable_styling(full_width = F) %>% 
+    column_spec(3, border_left = T) %>% 
+    column_spec(4, border_right = T)
+}
+
+worst_start(5, n=10)
+```
+
+### 0 Win vs 0 Loss Teams
+```{r}
+
+zero_win_vs_zero_loss = AllGames %>% filter(week > 2) %>% filter(team_losses==0) %>% filter(opponent_wins==0)
+
+rm(zero_win_vs_zero_loss)
+
+```
+
+
+### Longest Undefeated Streak To Open A Season
+```{r}
+longest_undefeated = AllGames %>% filter(team_losses==0) %>% arrange(desc(team_wins)) %>% filter(result==0) %>% filter(team_wins>2) %>%
+  select(season, team, team_wins, team_losses, opponent, opponent_wins, opponent_losses, score, opponent_score) %>%
+  mutate(losing_margin = score - opponent_score) %>% select(-score, -opponent_score) %>%
+  mutate(record = paste(team_wins, team_losses, sep = '-')) %>% mutate(opponent_record = paste(opponent_wins, opponent_losses, sep = '-')) %>%
+  select(season, team, record, opponent, opponent_record, losing_margin)
+
+longest_undefeated %>% 
+    kable(col.names = c("Season", "Team", "W-L to Start Season", "Next Opponent", "Opponent Record", "Losing Margin"),
+          caption = "<span style='font-size:50px'><center>Best Undefeated Streaks to Start a Season and Their End<center></span>") %>%
+    kable_styling(full_width = F) %>% 
+    column_spec(3, border_right = T) %>% 
+    row_spec(8, bold=T)
+```
+
+
+### Most Times Scoring Top x in a Week
+```{r}
+topx_freq = function(x, since2017=FALSE){
+  #how many times finishing top 3 in a week per team
+  n = AllGames %>% filter(overall_losses<x) %>% count(team)
+  if(since2017==TRUE){n = n %>% filter(season>2016)}
+
+  #how many weeks played per team
+  gp = AllGames %>% count(team) %>% rename(gp=n)
+  if(since2017==TRUE){gp = gp %>% filter(season>2016)}
+
+  #join tables
+  topn_frac = left_join(n, gp, by='team')
+
+  #add column for percentage of times placed in top 3
+  topn_frac = topn_frac %>% mutate(freq = n / gp) %>% arrange(desc(freq)) %>% mutate(freq = round(freq, digits = 3))
+  
+  #find current league members to use in the output table
+  current = AllGames %>% arrange(desc(season), desc(week)); current = current[1:10, 'team']; current = current$team
+  
+  #make output table
+  capt = paste("<span style='font-size:40px'><center>","Who Scores in the Top ", x, " with the Highest Frequency?","<center></span>", sep = '')
+  color_rows = which(topn_frac$team %in% current)
+  topn_frac %>% kable(caption = capt) %>% kable_styling(full_width = F) %>% column_spec(4, bold = T, border_left = T) %>%
+    row_spec(color_rows, background = "#F1E5AC")
+}
+
+topx_freq(3)
+```
+
+
+### Difference in PF 5 Weeks In
+```{r}
+#find points scored through a given week
+afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summarize(PF = sum(score)) %>% arrange(season, desc(PF))
+#rank each team in PF through the given week
+vec = rep(1:10, times=length(unique(AllGames$season)))
+afterweek5$PFrank = vec
+#put the first place team and fourth place team each season in the same row
+first = afterweek5 %>% filter(PFrank == 1) ; fourth = afterweek5 %>% filter(PFrank == 4)
+afterweek5 = left_join(first, fourth, by='season') %>% mutate(diff = PF.x-PF.y) %>% select(season, team.x, PF.x, team.y, PF.y, diff) %>%
+  arrange(diff)
+
+#display results
+afterweek5 %>% kable(col.names = c("Season", "First In Points", "Points", "Fourth in Points", "Points", "Difference"),
+          caption = "<span style='font-size:50px'><center>Closest PF Races Through 5 Weeks<center></span>") %>%
+    kable_styling(full_width = F) %>% 
+    column_spec(3, border_right = T) %>%  column_spec(5, border_right = T) %>%  column_spec(1, border_right = T) %>% 
+    row_spec(1, bold=T)
+
+rm(afterweek5, first, fourth, vec)
+```
+
+
+### Compare Record to Overall Wins
+```{r}
+#find all 4-1 teams
+teams4_1 = AllGames %>% filter(team_wins+result==4) %>% filter(team_losses+ifelse(result==1, 0, 1)==1) %>% select(season, team, team_wins, team_losses, result) %>% mutate(team_wins = team_wins+result) %>% mutate(team_losses = 1) %>% select(!result)
+
+#find PF for all teams through week 5
+afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summarize(PF = sum(score)) %>% arrange(season, desc(PF))
+
+#add PF as a column in the df of 4-1 teams
+teams4_1 = left_join(teams4_1, afterweek5, by=c('season', 'team'))
+
+#find overall wins for all teams through week 5 and add them as a column in the df of 4-1 teams
+afterweek5 = afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summarize(overall_wins = sum(overall_wins))
+teams4_1 = left_join(teams4_1, afterweek5, by=c('season', 'team'))
+
+#find overall losses for all teams through week 5 and add them as a column in the df of 4-1 teams
+afterweek5 = afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summarize(overall_losses = sum(overall_losses))
+teams4_1 = left_join(teams4_1, afterweek5, by=c('season', 'team'))
+
+#combine overall wins and losses into a record column
+teams4_1 = teams4_1 %>% arrange(desc(overall_wins)) %>% mutate(overall_record = paste(overall_wins, "-", overall_losses, sep = "")) %>%
+  select(season, team, PF, overall_record)
+
+#display results
+teams4_1 %>% kable(col.names = c("Season", "Team", "Points", "Overall Record"),
+          caption = "<span style='font-size:50px'><center>Evaluating all of the 4-1 Teams in League History<center></span>",
+          align = 'c') %>%
+    kable_styling(full_width = F) %>% 
+    column_spec(2, border_right = T) %>%
+    row_spec(14, bold=T, color = "#765705")
+
+
+rm(afterweek5, teams4_1)
+```
