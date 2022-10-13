@@ -649,9 +649,11 @@ rm(afterweek5, teams4_1)
 
 ### Set Perfect Lineup
 ```{r}
-df = AllGames %>% filter(season==2022 & week==5)
 SetPerfectLineup = function(df){
-  for(r in nrow(df)){
+  end_res = data.frame(season = NA, week = NA, team = NA, perfect_score = NA, subs_for_perfect = NA)
+  for(r in 1:nrow(df)){
+    #skip row if no player level data
+    if(is.na(df[r,'qb'])){next}
     #basic info
     tm = df[[r,'team']]
     szn = df[[r,'season']]
@@ -661,7 +663,7 @@ SetPerfectLineup = function(df){
     #list of players and their score
     #fake names serve the purpose of an ID for the player when filling the roster
     player_list[1,2] = "QB"; player_list[1,3] = df[r, 'qb']; player_list[1,1] = "Eli Manning"
-    player_list[2,2] = "RB"; player_list[2,3] = df[r, 'rb1']; player_list[2,1] = "Ladanian Tomlinson"
+    player_list[2,2] = "RB"; player_list[2,3] = df[r, 'rb1']; player_list[2,1] = "LaDainian Tomlinson"
     player_list[3,2] = "RB"; player_list[3,3] = df[r, 'rb2']; player_list[3,1] = "Brandon Jacobs"
     player_list[4,2] = "WR"; player_list[4,3] = df[r, 'wr1']; player_list[4,1] = "Odell Beckham Jr."
     player_list[5,2] = "WR"; player_list[5,3] = df[r, 'wr2']; player_list[5,1] = "Victor Cruz"
@@ -669,6 +671,7 @@ SetPerfectLineup = function(df){
     player_list[7,2] = "DST"; player_list[7,3] = df[r, 'dst']; player_list[7,1] = "Giants"
     player_list[8,2] = df[r,'wr_te_pos']; player_list[8,3] = df[r, 'wr_te']; player_list[8,1] = "Josh Gordon"
     player_list[9,2] = df[r,'flex_pos']; player_list[9,3] = df[r, 'flex']; player_list[9,1] = "Doug Martin"
+    original_starters = player_list$Name
     player_list[10,2] = df[r,'b1_pos']; player_list[10,3] = df[r, 'b1']; player_list[10,1] = "Andre Johnson"
     player_list[11,2] = df[r,'b2_pos']; player_list[11,3] = df[r, 'b2']; player_list[11,1] = "Calvin Johnson"
     player_list[12,2] = df[r,'b3_pos']; player_list[12,3] = df[r, 'b3']; player_list[12,1] = "Johnny Manziel"
@@ -680,7 +683,48 @@ SetPerfectLineup = function(df){
     #fill out a perfect roster
     perfect_roster = data.frame(Name=NA, Pos=NA, Pts=NA); perfect_roster = perfect_roster[-1,]
     perfect_roster[1,2] = "QB"; a = player_list %>% filter(Pos=="QB") %>% arrange(desc(Pts)); perfect_roster[1,3] = a[[1,3]]; perfect_roster[1,1] = a[[1,1]]
+    perfect_roster[2,2] = "RB1"; a = player_list %>% filter(Pos=="RB") %>% arrange(desc(Pts)); perfect_roster[2,3] = a[[1,3]]; perfect_roster[2,1] = a[[1,1]]
+    perfect_roster[3,2] = "RB2"; a = player_list %>% filter(Pos=="RB") %>% arrange(desc(Pts)); perfect_roster[3,3] = a[[2,3]]; perfect_roster[3,1] = a[[2,1]]
+    perfect_roster[4,2] = "WR1"; a = player_list %>% filter(Pos=="WR") %>% arrange(desc(Pts)); perfect_roster[4,3] = a[[1,3]]; perfect_roster[4,1] = a[[1,1]]
+    perfect_roster[5,2] = "WR2"; a = player_list %>% filter(Pos=="WR") %>% arrange(desc(Pts)); perfect_roster[5,3] = a[[2,3]]; perfect_roster[5,1] = a[[2,1]]
+    perfect_roster[7,2] = "TE"; a = player_list %>% filter(Pos=="TE") %>% arrange(desc(Pts)); perfect_roster[7,3] = a[[1,3]]; perfect_roster[7,1] = a[[1,1]]
+    perfect_roster[9,2] = "DST"; a = player_list %>% filter(Pos=="DST") %>% arrange(desc(Pts)); perfect_roster[9,3] = a[[1,3]]; perfect_roster[9,1] = a[[1,1]]
+    #remove players we already used before selecting flex positions for the perfect lineup
+    still_available = data.frame(Name = setdiff(player_list$Name, perfect_roster$Name))
+    player_list = left_join(still_available, player_list, by="Name")
+    perfect_roster[6,2] = "WR/TE"; a = player_list %>% filter(Pos=="WR" | Pos=="TE") %>% arrange(desc(Pts)); perfect_roster[6,3] = a[[1,3]]; perfect_roster[6,1] = a[[1,1]]
+    still_available = data.frame(Name = setdiff(player_list$Name, perfect_roster$Name))
+    player_list = left_join(still_available, player_list, by="Name")
+    perfect_roster[8,2] = "FLEX"; a = player_list %>% filter(Pos=="WR" | Pos=="TE" | Pos=="RB") %>% arrange(desc(Pts)) 
+    perfect_roster[8,3] = a[[1,3]]; perfect_roster[8,1] = a[[1,1]]
+    #replace any negative score with 0 because they would be better off if the player was benched
+    for(i in 1:nrow(perfect_roster)){perfect_roster[i,1] = ifelse(perfect_roster[i,3]<0, "BENCHED", perfect_roster[i,1])}
+    for(i in 1:nrow(perfect_roster)){perfect_roster[i,3] = ifelse(perfect_roster[i,3]<0, 0, perfect_roster[i,3])}
+    #find how much the perfect lineup would have scored
+    perfect_score = perfect_roster %>% summarise(score=sum(Pts, na.rm = T)); perfect_score = perfect_score[[1,1]]
+    subs_for_perfect = length(setdiff(original_starters, perfect_roster$Name)) %>% as.numeric()
+    #add results to df
+    end_res[r,1] = szn
+    end_res[r,2] = wk
+    end_res[r,3] = tm
+    end_res[r,4] = perfect_score
+    end_res[r,5] = subs_for_perfect
   }
+  df = left_join(df, end_res, by=c('season', 'week', 'team'))
+  return(df)
 }
 
+AllGames = SetPerfectLineup(AllGames) %>% relocate(perfect_score, .after = score) %>% relocate(subs_for_perfect, .after = perfect_score)
 ```
+
+```{r}
+PL = AllGames %>% filter(season==2022) %>% 
+  select(season, week, team, score, projection, perfect_score, subs_for_perfect) %>% group_by(team) %>% 
+  summarise(projection = sum(projection), score = sum(score), perfect_score = sum(perfect_score), subs_for_perfect = sum(subs_for_perfect)) %>%
+  mutate(percent_of_projection = round((score / projection)*100, digits = 2), 
+         percent_of_perfect = round((score / perfect_score)*100, digits = 2),
+         points_left_on_bench = perfect_score-score) %>%
+  relocate(points_left_on_bench, .after=score)
+
+```
+
