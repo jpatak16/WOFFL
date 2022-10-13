@@ -645,3 +645,42 @@ teams4_1 %>% kable(col.names = c("Season", "Team", "Points", "Overall Record"),
 
 rm(afterweek5, teams4_1)
 ```
+
+
+### Set Perfect Lineup
+```{r}
+df = AllGames %>% filter(season==2022 & week==5)
+SetPerfectLineup = function(df){
+  for(r in nrow(df)){
+    #basic info
+    tm = df[[r,'team']]
+    szn = df[[r,'season']]
+    wk = df[[r,'week']]
+    #empty df for a list of players
+    player_list = data.frame(Name= NA, Pos = NA, Pts = NA); player_list = player_list[-1,]
+    #list of players and their score
+    #fake names serve the purpose of an ID for the player when filling the roster
+    player_list[1,2] = "QB"; player_list[1,3] = df[r, 'qb']; player_list[1,1] = "Eli Manning"
+    player_list[2,2] = "RB"; player_list[2,3] = df[r, 'rb1']; player_list[2,1] = "Ladanian Tomlinson"
+    player_list[3,2] = "RB"; player_list[3,3] = df[r, 'rb2']; player_list[3,1] = "Brandon Jacobs"
+    player_list[4,2] = "WR"; player_list[4,3] = df[r, 'wr1']; player_list[4,1] = "Odell Beckham Jr."
+    player_list[5,2] = "WR"; player_list[5,3] = df[r, 'wr2']; player_list[5,1] = "Victor Cruz"
+    player_list[6,2] = "TE"; player_list[6,3] = df[r, 'te']; player_list[6,1] = "Jeremy Shockey"
+    player_list[7,2] = "DST"; player_list[7,3] = df[r, 'dst']; player_list[7,1] = "Giants"
+    player_list[8,2] = df[r,'wr_te_pos']; player_list[8,3] = df[r, 'wr_te']; player_list[8,1] = "Josh Gordon"
+    player_list[9,2] = df[r,'flex_pos']; player_list[9,3] = df[r, 'flex']; player_list[9,1] = "Doug Martin"
+    player_list[10,2] = df[r,'b1_pos']; player_list[10,3] = df[r, 'b1']; player_list[10,1] = "Andre Johnson"
+    player_list[11,2] = df[r,'b2_pos']; player_list[11,3] = df[r, 'b2']; player_list[11,1] = "Calvin Johnson"
+    player_list[12,2] = df[r,'b3_pos']; player_list[12,3] = df[r, 'b3']; player_list[12,1] = "Johnny Manziel"
+    player_list[13,2] = df[r,'b4_pos']; player_list[13,3] = df[r, 'b4']; player_list[13,1] = "Michael Strahan"
+    player_list[14,2] = df[r,'b5_pos']; player_list[14,3] = df[r, 'b5']; player_list[14,1] = "Tom Coughlin"
+    player_list[15,2] = df[r,'b6_pos']; player_list[15,3] = df[r, 'b6']; player_list[15,1] = "Rueben Randle"
+    player_list[16,2] = df[r,'b7_pos']; player_list[16,3] = df[r, 'b7']; player_list[16,1] = "David Tyree"
+    player_list = player_list %>% filter(!is.na(Pos))
+    #fill out a perfect roster
+    perfect_roster = data.frame(Name=NA, Pos=NA, Pts=NA); perfect_roster = perfect_roster[-1,]
+    perfect_roster[1,2] = "QB"; a = player_list %>% filter(Pos=="QB") %>% arrange(desc(Pts)); perfect_roster[1,3] = a[[1,3]]; perfect_roster[1,1] = a[[1,1]]
+  }
+}
+
+```
