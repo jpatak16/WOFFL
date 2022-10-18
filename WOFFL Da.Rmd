@@ -527,7 +527,7 @@ worst_start = function(weeks, n=5){
     column_spec(4, border_right = T)
 }
 
-worst_start(5, n=10)
+worst_start(6, n=10)
 ```
 
 ### 0 Win vs 0 Loss Teams
@@ -584,7 +584,7 @@ topx_freq = function(x, since2017=FALSE){
     row_spec(color_rows, background = "#F1E5AC")
 }
 
-topx_freq(3)
+topx_freq(1)
 ```
 
 
@@ -623,7 +623,7 @@ afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summariz
 teams4_1 = left_join(teams4_1, afterweek5, by=c('season', 'team'))
 
 #find overall wins for all teams through week 5 and add them as a column in the df of 4-1 teams
-afterweek5 = afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summarize(overall_wins = sum(overall_wins))
+afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summarize(overall_wins = sum(overall_wins))
 teams4_1 = left_join(teams4_1, afterweek5, by=c('season', 'team'))
 
 #find overall losses for all teams through week 5 and add them as a column in the df of 4-1 teams
@@ -717,7 +717,10 @@ SetPerfectLineup = function(df){
 AllGames = SetPerfectLineup(AllGames) %>% relocate(perfect_score, .after = score) %>% relocate(subs_for_perfect, .after = perfect_score)
 ```
 
-```{r}
+
+### Possible Points vs PF
+```{r fig.width=8, fig.height=15}
+#find how teams did compared to perfect and projected scores
 PL = AllGames %>% filter(season==2022) %>% 
   select(season, week, team, score, projection, perfect_score, subs_for_perfect) %>% group_by(team) %>% 
   summarise(projection = sum(projection), score = sum(score), perfect_score = sum(perfect_score), subs_for_perfect = sum(subs_for_perfect)) %>%
@@ -726,5 +729,30 @@ PL = AllGames %>% filter(season==2022) %>%
          points_left_on_bench = perfect_score-score) %>%
   relocate(points_left_on_bench, .after=score)
 
-```
+#pivot longer so we can make a stacked bar chart
+PL2 = PL %>% select(team, score, points_left_on_bench) %>% pivot_longer(!team, names_to = 'type', values_to = 'points')
+#abbreviate team names so they fit on the x axis nicer
+PL2$team = abbreviate(PL2$team, minlength = 2, strict = F)
+#pull values for our text on the stacked bar chart
+PL3 = PL %>% select(team, score, percent_of_perfect)
+#abbreviate those names so we can match them to PL2
+PL3$team = abbreviate(PL3$team, minlength = 2, strict = F)
+#join PL2 and PL3 to have all data needed in the PL2 set
+PL2 = full_join(PL2, PL3)
+#set the order for the bars on the x axis of the graph
+o = PL2 %>% filter(type == "score") %>% arrange(desc(points)) %>% extract2("team")
+PL2 = PL2 %>% mutate(team = factor(team, o))
 
+#plot
+ggplot(PL2, aes(x=team, y=points, fill=type)) + geom_bar(position = "stack", stat = "identity") +
+  scale_fill_manual(labels = c('PPP', 'PF'), values = c('red', 'dark green')) +
+  ggtitle("How Good of Lineups Do You Set?", subtitle = "Through 6 Weeks of the 2022 WOFFL Season") +
+  xlab("Team") + ylab("Points") +
+  geom_text(data = PL2, aes(x=team, y=score, label=round(percent_of_perfect,1)), color='white', nudge_y = -10) +
+  theme_minimal() + theme(legend.position = 'top',
+                          legend.title = element_blank())
+  
+
+rm(PL, PL2, PL3, o)
+
+```
