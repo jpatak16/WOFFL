@@ -6,7 +6,7 @@ output: pdf_document
 
 ```{r}
 library(pacman)
-p_load(dplyr, stargazer, data.table, formattable, tidyr, ggplot2, readxl, gganimate, janitor, magrittr, kableExtra)
+p_load(dplyr, stargazer, data.table, formattable, tidyr, ggplot2, readxl, gganimate, janitor, magrittr, kableExtra, gridExtra)
 ```
 
 ```{r}
@@ -756,3 +756,65 @@ ggplot(PL2, aes(x=team, y=points, fill=type)) + geom_bar(position = "stack", sta
 rm(PL, PL2, PL3, o)
 
 ```
+
+
+### Records if Everyone Always Set Their Perfect Lineup
+```{r}
+a = AllGames %>% filter(season==2022) %>% select(season, week, team, score, perfect_score, opponent, opponent_score)
+opp_perfect_scores = c()
+for(r in 1:nrow(a)){
+  wk = a[[r,2]]
+  opp = a[[r,6]]
+  opp_ps = a %>% filter(week == wk) %>% filter(team == opp) %>% .[[1, 5]]
+  opp_perfect_scores[r] = opp_ps
+}
+a$opponent_perfect_score = opp_perfect_scores
+
+a$perfect_result = ifelse(a$perfect_score > a$opponent_perfect_score, 1, 0)
+
+a = a %>% group_by(team) %>% summarise(wins = sum(perfect_result))
+a$losses = wk-a$wins
+
+a %>% kable()
+
+rm(a, opp, opp_perfect_scores, opp_ps, r, wk)
+```
+
+
+### Score Distributions
+```{r fig.width=4, fig.height=15}
+#who played last week?
+lastweek = AllGames %>% filter(season == max(AllGames$season)); lastweek = lastweek %>% filter(week == max(lastweek$week))
+lastweek = lastweek$team
+
+#manually add another variable to signify upcoming match ups and facets
+AllGames_temp = AllGames %>% 
+  mutate(matchup = ifelse(team=="Austin Iske"|team=="Jeremy Patak", "Iske vs Jeremy", 0)) %>%
+  mutate(matchup = ifelse(team=="Seth Lassiter"|team=="Nike Simmons", "Seth vs Nike", matchup)) %>%
+  mutate(matchup = ifelse(team=="Daniel Potichko"|team=="Nick McFarland", "Daniel vs Nick", matchup)) %>%
+  mutate(matchup = ifelse(team=="Landry Sheridan"|team=="Brody Morgan", "Landry vs Brody", matchup)) %>%
+  mutate(matchup = ifelse(team=="Stone Palmer"|team=="Dax Davis", "Stone vs Dax", matchup))
+
+AllGames_temp <- split(AllGames_temp,f = AllGames_temp$matchup)
+
+p1 = ggplot(AllGames_temp$`Daniel vs Nick` %>% filter(team %in% lastweek), aes(x=score, fill=team, color=team)) + 
+  geom_density(alpha=.1) +
+  facet_wrap(~matchup, ncol = 1) +
+  xlim(30,170) + ylim(0,.025) +
+  theme_bw() +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "bottom",
+        legend.title = element_blank())
+
+p2 = p1 %+% AllGames_temp$`Iske vs Jeremy`
+p3 = p2 %+% AllGames_temp$`Landry vs Brody`
+p4 = p3 %+% AllGames_temp$`Seth vs Nike`
+p5 = p4 %+% AllGames_temp$`Stone vs Dax`
+
+grid.arrange(p1, p2, p3, p4, p5, ncol=1)
+
+rm(AllGames_temp, p1, p2, p3, p4, p5, lastweek)
+```
+
+
