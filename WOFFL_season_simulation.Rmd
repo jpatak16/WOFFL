@@ -13,7 +13,7 @@ p_load(dplyr, readxl, janitor, tidyr, openxlsx)
 #create variable for season we want to simulate the rest of
 CurrentSeason = 2022
 #import data set
-SeasonGames = read_excel("~/Fantasy/AllGames.xlsx", sheet = "All Games") %>%
+SeasonGames = read_excel("AllGames.xlsx", sheet = "All Games") %>%
   clean_names() %>%
   filter(season==CurrentSeason) %>%
   #remove extra things we don't need
@@ -301,10 +301,10 @@ simmed_seasons = simulate_season(SeasonGames, team_stats, divisions, 20000)
 ```
 
 ```{r export results}
-#write.xlsx(simmed_seasons, "~/Fantasy/2022/rankings.xlsx", colnames=T)
+#write.xlsx(simmed_seasons, file = "C:/Users/jerem/Documents/Fantasy/2022/rankings/rankings.xlsx", colnames=T)
 
-wb = loadWorkbook("~/Fantasy/2022/rankings/rankings.xlsx")
-addWorksheet(wb, "Wk5")
-writeData(wb, sheet = "Wk5", x=simmed_seasons)
-saveWorkbook(wb, "~/Fantasy/2022/rankings/rankings.xlsx", overwrite = T)
+wb = loadWorkbook(file = "C:/Users/jerem/Documents/Fantasy/2022/rankings/rankings.xlsx")
+addWorksheet(wb, "Wk7")
+writeData(wb, sheet = "Wk7", x=simmed_seasons)
+saveWorkbook(wb, file = "C:/Users/jerem/Documents/Fantasy/2022/rankings/rankings.xlsx", overwrite = T)
 ```
