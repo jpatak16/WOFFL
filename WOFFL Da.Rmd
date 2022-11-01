@@ -818,3 +818,16 @@ rm(AllGames_temp, p1, p2, p3, p4, p5, lastweek)
 ```
 
 
+### Weekly Scoring Recap
+```{r}
+a = AllGames %>% group_by(season, week) %>% summarise(PF = sum(score))
+
+ggplot(AllGames %>% filter(season==2022)) + geom_boxplot(aes(x=week, y=score, group=week)) + 
+  geom_path(data = AllGames %>% filter(season==2022) %>% group_by(week) %>% summarise(PF = sum(score)),
+            aes(x=week, y=PF/5), size=3, color="red", alpha=.5) + theme_bw() + 
+  theme(panel.grid = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  xlab("Week") + ylab("Score") +
+  scale_x_continuous(breaks = c(1:nrow(AllGames %>% filter(season==2022) %>% group_by(week) %>% summarise(PF = sum(score)))))
+```
