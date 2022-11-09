@@ -19,7 +19,7 @@ CW = AllGames %>% filter(season==CS) %>% filter(!is.na(score)) %>% filter(score>
 #remove unplayed games
 AllGames = AllGames %>% filter(season<CS | (season==CS & week<=CW))
 
-rm(CS, CW)
+rm(CW)
 ```
 
 ```{r}
@@ -250,7 +250,7 @@ wins_by_week = wins_by_week %>%
   group_by(wk) %>%
   mutate(rank = rank(-wins, ties.method = "first"),
          Value_rel = wins/wins[rank==1]) %>%
-  filter(rank<=11)
+  filter(rank<=10)
 
 staticplot = ggplot(wins_by_week, aes(rank, group = team,
                 fill = as.factor(team), color = as.factor(team))) +
@@ -282,13 +282,13 @@ staticplot = ggplot(wins_by_week, aes(rank, group = team,
         plot.background=element_blank(),
         plot.margin = margin(2,2, 2, 4, "cm"))
 
-anim = staticplot + transition_states(wk, transition_length = 4, state_length = 1) +
+anim = staticplot + transition_states(wk, transition_length = 4, state_length = 1, wrap = FALSE) +
   view_follow(fixed_x = TRUE)  +
   labs(title = 'WOFFL All Time Wins Race',
        subtitle  =  "Weeks since 2013 Season Started : {closest_state}")
 
 #animate the bar graph
-#animate(anim, 600, fps = 20, duration = 30,  width = 1200, height = 1000, renderer = gifski_renderer("gganim.gif"))
+#animate(anim, fps = 20, duration = 30,  width = 1200, height = 1000, end_pause = 120, renderer = gifski_renderer("gganim.gif"))
 
 rm(anim, staticplot, wins_by_week)
 ```
@@ -354,7 +354,7 @@ wins_by_week = wins_by_week %>%
   group_by(wk) %>%
   mutate(rank = rank(-wins, ties.method = "first"),
          Value_rel = wins/wins[rank==1]) %>%
-  filter(rank<=11)
+  filter(rank<=10)
 
 staticplot = ggplot(wins_by_week, aes(rank, group = team,
                 fill = as.factor(team), color = as.factor(team))) +
@@ -386,13 +386,13 @@ staticplot = ggplot(wins_by_week, aes(rank, group = team,
         plot.background=element_blank(),
         plot.margin = margin(2,2, 2, 4, "cm"))
 
-anim = staticplot + transition_states(wk, transition_length = 4, state_length = 1) +
+anim = staticplot + transition_states(wk, transition_length = 4, state_length = 1, wrap = FALSE) +
   view_follow(fixed_x = TRUE)  +
   labs(title = 'WOFFL Wins Since the Start of 2017 Season',
        subtitle  =  "Weeks since 2017 Season Started : {closest_state}")
 
 #animate the bar graph
-#animate(anim, 600, fps = 20, duration = 30,  width = 1200, height = 1000, renderer = gifski_renderer("gganim.gif"))
+#animate(anim, fps = 20, duration = 30,  width = 1200, height = 1000, end_pause = 120, renderer = gifski_renderer("gganim.gif"))
 
 rm(anim, staticplot, wins_by_week)
 ```
@@ -408,6 +408,212 @@ ggplot(WinsSince2017) + geom_col(aes(x=reorder(team, wins), y=wins, fill=team)) 
 
 rm(WinsSince2017)
 ```
+
+### Current Overall Points Standings
+```{r}
+#create empty df for points by week data
+points_by_week = data.frame(Wk=NA, Team=NA, Points=NA)[0,]
+
+#the for loop will populate the points by week data frame one team at a time
+for(t in unique(AllGames$team)){
+  #empty data frame for each team to start with
+  points_by_week_t = data.frame(wk=NA, team=NA, Points=NA)[0,]
+  #find all games played by each team
+  list_games = AllGames %>% filter(team==t)
+  #populate first row of points by week data frame
+  points_by_week_t[1,] = c(1, t, ifelse(list_games$ov_wk[1]==1,
+                                      list_games$score[1],
+                                      0))
+  #for loop to populate the rest of the rows
+  for(w in 2:max(AllGames$ov_wk)){
+    #find game for team t in week w
+    game = list_games %>% filter(ov_wk==w)
+    #decides if team t played a game in week w or not
+    pg = ifelse(nrow(game)>0, 
+                ifelse(is.na(game$opponent), 0, 1), 0)
+    #decides team t score in week w or not
+    score = as.numeric(ifelse(pg>0, game$score[1], 0))
+    #figures out how many all time points team t already had
+    previous_points = as.numeric(points_by_week_t[w-1,3])
+    #populates the row for week w based on how many points team t has now
+    points_by_week_t[w,] = c(w, t, previous_points+score)
+  }
+  #combines all teams into one df
+  points_by_week = rbind(points_by_week, points_by_week_t)
+}
+
+points_by_week$wk = as.numeric(points_by_week$wk)
+points_by_week$Points = as.numeric(points_by_week$Points)
+
+rm(game, list_games, points_by_week_t, pg, previous_points, t, w, score)
+```
+
+```{r}
+#plot points by week
+points_by_week = points_by_week %>%
+  #add current rank for each team each week
+  group_by(wk) %>%
+  mutate(rank = rank(-Points, ties.method = "first"),
+         Value_rel = Points/Points[rank==1],
+         Value_lbl = paste0("",round(Points, 0))) %>%
+  filter(rank<=10)
+
+staticplot = ggplot(points_by_week, aes(rank, group = team,
+                fill = as.factor(team), color = as.factor(team))) +
+  geom_tile(aes(y = Points/2,
+                height = Points,
+                width = 0.9), alpha = 0.8, color = NA) +
+  geom_text(aes(y = 0, label = paste(team, " ")), vjust = 0.2, hjust = 1) +
+  geom_text(aes(y=Points, label = Value_lbl), hjust=0) +
+  coord_flip(clip = "off", expand = FALSE) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_reverse() +
+  guides(color = FALSE, fill = FALSE) +
+  theme(axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+         axis.title.y=element_blank(),
+        legend.position="none",
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        panel.grid.major.x = element_line( size=.1, color="grey" ),
+        panel.grid.minor.x = element_line( size=.1, color="grey" ),
+        plot.title=element_text(size=25, hjust=0.5, face="bold", colour="grey", vjust=-1),
+        plot.subtitle=element_text(size=18, hjust=0.5, face="italic", color="grey"),
+        plot.caption =element_text(size=8, hjust=0.5, face="italic", color="grey"),
+        plot.background=element_blank(),
+        plot.margin = margin(2,2, 2, 4, "cm"))
+
+anim = staticplot + transition_states(wk, transition_length = 4, state_length = 1, wrap = FALSE) +
+  view_follow(fixed_x = TRUE)  +
+  labs(title = 'WOFFL All Time Points Race',
+       subtitle  =  "Weeks since 2013 Season Started : {closest_state}")
+
+#animate the bar graph
+#animate(anim, fps = 20, duration = 45,  width = 1200, height = 1000, end_pause = 120, renderer = gifski_renderer("gganim.gif"))
+
+rm(anim, staticplot, points_by_week)
+```
+
+```{r}
+#static version of the plot
+AllTimePoints = AllGames %>% group_by(team) %>% summarise(points = sum(score, na.rm = T)) %>% arrange(desc(points))
+AllTimePoints = AllTimePoints[1:10,]
+
+ggplot(AllTimePoints) + geom_col(aes(x=reorder(team, points), y=points, fill=team)) +
+  coord_flip() + theme(legend.position = 'none') + xlab("") + ylab("All-Time Points") +
+  ggtitle("WOFFL All-Time Points Leaders")
+
+rm(AllTimePoints)
+```
+
+
+### Current Points Standings Since 2017
+```{r}
+#create empty df for points by week data
+points_by_week = data.frame(Wk=NA, Team=NA, Points=NA)[0,]
+
+#the for loop will populate the points by week data frame one team at a time
+for(t in unique(Since2017$team)){
+  #empty data frame for each team to start with
+  points_by_week_t = data.frame(wk=NA, team=NA, Points=NA)[0,]
+  #find all games played by each team
+  list_games = Since2017 %>% filter(team==t)
+  #populate first row of points by week data frame
+  points_by_week_t[1,] = c(1, t, ifelse(list_games$ov_wk[1]==61,
+                                      list_games$score[1],
+                                      0))
+  #for loop to populate the rest of the rows
+  for(w in 62:max(Since2017$ov_wk)){
+    #find game for team t in week w
+    game = list_games %>% filter(ov_wk==w)
+    #decides if team t played a game in week w or not
+    pg = ifelse(nrow(game)>0, 
+                ifelse(is.na(game$opponent), 0, 1), 0)
+    #decides score of team t in week w
+    score = as.numeric(ifelse(pg>0, game$score[1], 0))
+    #figures out how many all time points team t already had
+    previous_points = as.numeric(points_by_week_t[w-61,3])
+    #populates the row for week w based on how many points team t has now
+    points_by_week_t[w-60,] = c(w-60, t, previous_points+score)
+  }
+  #combines all teams into one df
+  points_by_week = rbind(points_by_week, points_by_week_t)
+}
+
+points_by_week$wk = as.numeric(points_by_week$wk)
+points_by_week$Points = as.numeric(points_by_week$Points)
+
+rm(game, list_games, points_by_week_t, pg, previous_points, t, w, score)
+```
+
+```{r}
+#plot points by week
+points_by_week = points_by_week %>%
+  #add current rank for each team each week
+  group_by(wk) %>%
+  mutate(rank = rank(-Points, ties.method = "first"),
+         Value_rel = Points/Points[rank==1],
+         Value_lbl = paste0("",round(Points, 0))) %>%
+  filter(rank<=10)
+
+staticplot = ggplot(points_by_week, aes(rank, group = team,
+                fill = as.factor(team), color = as.factor(team))) +
+  geom_tile(aes(y = Points/2,
+                height = Points,
+                width = 0.9), alpha = 0.8, color = NA) +
+  geom_text(aes(y = 0, label = paste(team, " ")), vjust = 0.2, hjust = 1) +
+  geom_text(aes(y=Points, label = Value_lbl), hjust=0) +
+  coord_flip(clip = "off", expand = FALSE) +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_reverse() +
+  guides(color = FALSE, fill = FALSE) +
+  theme(axis.line=element_blank(),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks=element_blank(),
+        axis.title.x=element_blank(),
+         axis.title.y=element_blank(),
+        legend.position="none",
+        panel.background=element_blank(),
+        panel.border=element_blank(),
+        panel.grid.major=element_blank(),
+        panel.grid.minor=element_blank(),
+        panel.grid.major.x = element_line( size=.1, color="grey" ),
+        panel.grid.minor.x = element_line( size=.1, color="grey" ),
+        plot.title=element_text(size=25, hjust=0.5, face="bold", colour="grey", vjust=-1),
+        plot.subtitle=element_text(size=18, hjust=0.5, face="italic", color="grey"),
+        plot.caption =element_text(size=8, hjust=0.5, face="italic", color="grey"),
+        plot.background=element_blank(),
+        plot.margin = margin(2,2, 2, 4, "cm"))
+
+anim = staticplot + transition_states(wk, transition_length = 4, state_length = 1, wrap = FALSE) +
+  view_follow(fixed_x = TRUE)  +
+  labs(title = 'WOFFL Points Scored Since the Start of 2017 Season',
+       subtitle  =  "Weeks since 2017 Season Started : {closest_state}")
+
+#animate the bar graph
+#animate(anim, fps = 20, duration = 30,  width = 1200, height = 1000, end_pause = 120, renderer = gifski_renderer("gganim.gif"))
+
+rm(anim, staticplot, wins_by_week)
+```
+
+```{r}
+#static version of the plot
+PointsSince2017 = Since2017 %>% group_by(team) %>% summarise(points = sum(score, na.rm = T)) %>% arrange(desc(points))
+PointsSince2017 = PointsSince2017[1:10,]
+
+ggplot(PointsSince2017) + geom_col(aes(x=reorder(team, points), y=points, fill=team)) +
+  coord_flip() + theme(legend.position = 'none') + xlab("") + ylab("Points Scored Since 2017") +
+  ggtitle("WOFFL Points Scored Leaders Since 2017")
+
+rm(PointsSince2017)
+```
+
 
 ### Wk1 Scores vs Season PF
 ```{r}
@@ -828,4 +1034,24 @@ ggplot(AllGames %>% filter(season==2022)) + geom_boxplot(aes(x=week, y=score, gr
         axis.ticks.y = element_blank()) +
   xlab("Week") + ylab("Score") +
   scale_x_continuous(breaks = c(1:nrow(AllGames %>% filter(season==2022) %>% group_by(week) %>% summarise(PF = sum(score)))))
+```
+
+
+### How Do Bad Teams Finish the Season
+```{r}
+a = AllGames %>% filter(week<=8) %>% group_by(team, season) %>% summarise(ppg = mean(score))
+b = AllGames %>% filter(week>8) %>% filter(reg_po == "Regular Season") %>% group_by(team, season) %>% summarise(ppg = mean(score))
+
+ppg_b4_and_after_w9 = left_join(b, a, by= c('team', 'season')) %>% select(team, season, ppg_b4_wk9 = ppg.y, ppg_after_wk9 = ppg.x) %>%
+  left_join(champ, by=c("team", "season")) %>% mutate(championship = ifelse(is.na(championship), 0, 1))
+
+ggplot(data = ppg_b4_and_after_w9, aes(x=ppg_b4_wk9, y=ppg_after_wk9)) + geom_point(aes(color=as.factor(championship))) +
+  scale_color_manual(values = c("0" = "black", "1" = "gold")) +
+  geom_smooth(method = 'lm', se=F, formula = y~poly(x,2)) +
+  theme_bw() +
+  xlab("PPG Weeks 1-8") + ylab("PPG Week 9 to End of Regular Season") +
+  ggtitle("Can You Turn Your Season Around This Late?") +
+  theme(legend.position = 'none')
+
+rm(a,b,ppg_b4_and_after_w9)
 ```
