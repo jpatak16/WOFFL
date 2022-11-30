@@ -55,6 +55,7 @@ progress_bar = txtProgressBar(min=0, max=20000, style = 3, char="=")
 
 simulate_season = function(sg, ts, div, n){
   all_sims = data.frame(sim_num = NA, team=NA, proj_PF=NA, proj_wins=NA, playoffs=NA, division_champ=NA, champion=NA); all_sims = all_sims[-1,]
+  standings_all_sims = data.frame(sim_num = NA, team = NA, place = NA); standings_all_sims = standings_all_sims[-1,]
   for(i in 1:n){
     #update the progress bar
     setTxtProgressBar(progress_bar, value = i)
@@ -260,11 +261,46 @@ simulate_season = function(sg, ts, div, n){
     gm1 = data.frame(team1=tm3, score1=rnorm(1, mean3, sd3), team2=tm6, score2=rnorm(1, mean6, sd6))
     gm2 = data.frame(team1=tm4, score1=rnorm(1, mean4, sd4), team2=tm5, score2=rnorm(1, mean5, sd5))
     
+    #collect teams  and stats for consilation bracket
+    consil = season_i_res %>% filter(playoffs==0) %>% arrange(desc(wins), desc(PF))
+    
+    consil7 = consil[[1,1]]
+    stats7 = team_stats %>% filter(team==consil7); mean7 = stats7[[1,2]]; sd7 = stats7[[1,3]]
+    consil8 = consil[[2,1]]
+    stats8 = team_stats %>% filter(team==consil8); mean8 = stats8[[1,2]]; sd8 = stats8[[1,3]]
+    consil9 = consil[[3,1]]
+    stats9 = team_stats %>% filter(team==consil9); mean9 = stats9[[1,2]]; sd9 = stats9[[1,3]]
+    consil10 = consil[[4,1]]
+    stats10 = team_stats %>% filter(team==consil10); mean10 = stats10[[1,2]]; sd10 = stats10[[1,3]]
+    
+    #create rd1 consil matchups
+    cgm1 = data.frame(team1=consil7, score1=rnorm(1, mean7, sd7), team2=consil10, score2=rnorm(1, mean10, sd10))
+    cgm2 = data.frame(team1=consil8, score1=rnorm(1, mean8, sd8), team2=consil9, score2=rnorm(1, mean9, sd9))
+    
     #create rd2 matchups
     gm3 = data.frame(team1=tm1, score1=rnorm(1, mean1, sd1), team2= ifelse(gm2$score1>gm2$score2, gm2$team1, gm2$team2), 
                      score2=rnorm(1, ifelse(gm2$score1>gm2$score2, mean4, mean5), ifelse(gm2$score1>gm2$score2, sd4, sd5)))
     gm4 = data.frame(team1=tm2, score1=rnorm(1, mean2, sd2), team2= ifelse(gm1$score1>gm2$score2, gm1$team1, gm1$team2), 
                      score2=rnorm(1, ifelse(gm1$score1>gm1$score2, mean3, mean6), ifelse(gm1$score1>gm1$score2, sd3, sd6)))
+    
+    #create consil rd2 matchups
+    cgm3 = data.frame(team1=ifelse(gm2$score1>gm2$score2, gm2$team2, gm2$team1), 
+                      score1=rnorm(1, ifelse(gm2$score1>gm2$score2, mean5, mean4), ifelse(gm2$score1>gm2$score2, sd5, sd4)), 
+                      team2= ifelse(cgm1$score1>cgm1$score2, cgm1$team1, cgm1$team2), 
+                      score2=rnorm(1, ifelse(cgm1$score1>cgm1$score2, mean7, mean10), ifelse(cgm1$score1>cgm1$score2, sd7, sd10)))
+    cgm4 = data.frame(team1=ifelse(gm1$score1>gm2$score2, gm1$team2, gm1$team1), 
+                      score1=rnorm(1, ifelse(gm1$score1>gm1$score2, mean6, mean3), ifelse(gm1$score1>gm1$score2, sd6, sd3)), 
+                      team2= ifelse(cgm2$score1>cgm2$score2, cgm2$team1, cgm2$team2), 
+                      score2=rnorm(1, ifelse(cgm2$score1>cgm2$score2, mean8, mean9), ifelse(cgm2$score1>cgm2$score2, sd8, sd9)))
+    cgm5 = data.frame(team1=ifelse(cgm1$score1>cgm1$score2, cgm1$team2, cgm1$team1), 
+                      score1=rnorm(1, ifelse(cgm1$score1>cgm1$score2, mean10, mean7), ifelse(cgm1$score1>cgm1$score2, sd10, sd7)), 
+                      team2= ifelse(cgm2$score1>cgm2$score2, cgm2$team2, cgm2$team1), 
+                      score2=rnorm(1, ifelse(cgm2$score1>cgm2$score2, mean9, mean8), ifelse(cgm2$score1>cgm2$score2, sd9, sd8)))
+    #cgm6 is a duplicate of cgm5
+    cgm6 = data.frame(team1=ifelse(cgm1$score1>cgm1$score2, cgm1$team2, cgm1$team1), 
+                      score1=rnorm(1, ifelse(cgm1$score1>cgm1$score2, mean10, mean7), ifelse(cgm1$score1>cgm1$score2, sd10, sd7)), 
+                      team2= ifelse(cgm2$score1>cgm2$score2, cgm2$team2, cgm2$team1), 
+                      score2=rnorm(1, ifelse(cgm2$score1>cgm2$score2, mean9, mean8), ifelse(cgm2$score1>cgm2$score2, sd9, sd8)))
     
     #create championship matchup
     gm5 = data.frame(team1=ifelse(gm3$score1>gm3$score2, gm3$team1, gm3$team2), score1=NA, 
@@ -278,24 +314,72 @@ simulate_season = function(sg, ts, div, n){
     champ = data.frame(team = ifelse(gm5$score1>gm5$score2, gm5$team1, gm5$team2), champ=1)
     season_i_res = left_join(season_i_res, champ, by="team") %>% mutate(champ = ifelse(is.na(champ), 0, champ))
     
+    #create 3rd place matchup
+    gm6 = data.frame(team1=ifelse(gm3$score1>gm3$score2, gm3$team2, gm3$team1), score1=NA, 
+                     team2=ifelse(gm4$score1>gm4$score2, gm4$team2, gm4$team1), score2=NA)
+    third_team1_stats = team_stats %>% filter(team==gm6$team1)
+    third_team2_stats = team_stats %>% filter(team==gm6$team2)
+    gm6$score1 = rnorm(1, third_team1_stats[[1,2]], third_team1_stats[[1,3]])
+    gm6$score2 = rnorm(1, third_team2_stats[[1,2]], third_team2_stats[[1,3]])
+    
+    #create consil championship matchup
+    cgm7 = data.frame(team1=ifelse(cgm3$score1>cgm3$score2, cgm3$team1, cgm3$team2), score1=NA, 
+                      team2=ifelse(cgm4$score1>cgm4$score2, cgm4$team1, cgm4$team2), score2=NA)
+    cc_team1_stats = team_stats %>% filter(team==cgm7$team1)
+    cc_team2_stats = team_stats %>% filter(team==cgm7$team2)
+    cgm7$score1 = rnorm(1, cc_team1_stats[[1,2]], cc_team1_stats[[1,3]])
+    cgm7$score2 = rnorm(1, cc_team2_stats[[1,2]], cc_team2_stats[[1,3]])
+    
+    #create 7th and 8th place matchup
+    cgm8 = data.frame(team1=ifelse(cgm3$score1>cgm3$score2, cgm3$team2, cgm3$team1), score1=NA, 
+                      team2=ifelse(cgm4$score1>cgm4$score2, cgm4$team2, cgm4$team1), score2=NA)
+    sev_team1_stats = team_stats %>% filter(team==cgm8$team1)
+    sev_team2_stats = team_stats %>% filter(team==cgm8$team2)
+    cgm8$score1 = rnorm(1, sev_team1_stats[[1,2]], sev_team1_stats[[1,3]])
+    cgm8$score2 = rnorm(1, sev_team2_stats[[1,2]], sev_team2_stats[[1,3]])
+    
     #add this sim to a df with all sims
     this_sim = data.frame(sim_num = rep(i, 10), team=season_i_res$team, proj_PF=season_i_res$PF, proj_wins=season_i_res$wins, 
                           playoffs=season_i_res$playoffs, division_champ=season_i_res$division_champ, champion=season_i_res$champ)
     all_sims = rbind(all_sims, this_sim)
+    
+    #assign each team a final placing
+    first = ifelse(gm5$score1>gm5$score2, gm5$team1, gm5$team2)
+    second = ifelse(gm5$score1>gm5$score2, gm5$team2, gm5$team1)
+    third = ifelse(gm6$score1>gm6$score2, gm6$team1, gm6$team2)
+    fourth = ifelse(gm6$score1>gm6$score2, gm6$team2, gm6$team1)
+    fifth = ifelse(cgm7$score1>cgm7$score2, cgm7$team1, cgm7$team2)
+    sixth = ifelse(cgm7$score1>cgm7$score2, cgm7$team2, cgm7$team1)
+    seventh = ifelse(cgm8$score1>cgm8$score2, cgm8$team1, cgm8$team2)
+    eigth = ifelse(cgm8$score1>cgm8$score2, cgm8$team2, cgm8$team1)
+    ninth = ifelse((cgm5$score1+cgm6$score1)>(cgm5$score2+cgm6$score2), cgm5$team1, cgm5$team2)
+    tenth = ifelse((cgm5$score1+cgm6$score1)>(cgm5$score2+cgm6$score2), cgm5$team2, cgm5$team1)
+    
+    standings_this_sim = data.frame(sim_num = rep(i,10), 
+                                    team = c(first, second, third, fourth, fifth, sixth, seventh, eigth, ninth, tenth),
+                                    place = c('1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'))
+    
+    standings_all_sims = rbind(standings_all_sims, standings_this_sim)
     }
   results= all_sims %>% group_by(team) %>% summarise(proj_wins = mean(proj_wins),
                                                      proj_PF = mean(proj_PF),
                                                      playoff_liklihood = mean(playoffs),
                                                      division_champ_likilhood = mean(division_champ),
                                                      champion_liklihood = mean(champion))
+  standings = standings_all_sims %>% pivot_wider(names_from = place, values_from = sim_num, values_fn = list(sim_num=length)) 
+    
+    
   close(progress_bar)
-  return(results)
+  return(list(results, standings))
 }
 ```
 
 ```{r run the simulation}
 
-simmed_seasons = simulate_season(SeasonGames, team_stats, divisions, 20000)
+simmed_seasons = simulate_season(SeasonGames, team_stats, divisions, 1000)
+
+simmed_standings = simmed_seasons[[2]]
+simmed_seasons = simmed_seasons[[1]]
 
 
 ```
@@ -304,7 +388,21 @@ simmed_seasons = simulate_season(SeasonGames, team_stats, divisions, 20000)
 #write.xlsx(simmed_seasons, file = "C:/Users/jerem/Documents/Fantasy/2022/rankings/rankings.xlsx", colnames=T)
 
 wb = loadWorkbook(file = "C:/Users/jerem/Documents/Fantasy/2022/rankings/rankings.xlsx")
-addWorksheet(wb, "Wk7")
-writeData(wb, sheet = "Wk7", x=simmed_seasons)
+addWorksheet(wb, "Wk12")
+writeData(wb, sheet = "Wk12", x=simmed_seasons)
 saveWorkbook(wb, file = "C:/Users/jerem/Documents/Fantasy/2022/rankings/rankings.xlsx", overwrite = T)
+```
+
+
+
+```{r heat map}
+simmed_standings[is.na(simmed_standings)] = 0
+simmed_standings = simmed_standings[order(simmed_standings$`1st`, decreasing = TRUE),]
+hm_dat = as.matrix(simmed_standings[,-1])
+rownames(hm_dat) = simmed_standings$team
+
+heatmap(hm_dat, Colv = NA, Rowv = NA, scale = 'column', col=heat.colors(256))
+
+
+
 ```
