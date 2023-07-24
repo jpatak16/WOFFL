@@ -6,16 +6,24 @@ output: pdf_document
 
 ```{r}
 library(pacman)
-p_load(dplyr, stargazer, data.table, formattable, tidyr, ggplot2, readxl, gganimate, janitor, magrittr, kableExtra, gridExtra, ggalt, forcats)
+p_load(dplyr, stargazer, data.table, formattable, tidyr, ggplot2, readxl, gganimate, janitor, magrittr, kableExtra, gridExtra, ggalt, forcats, gt)
 ```
 
 ```{r}
 #import data set
 AllGames = read_excel("AllGames.xlsx", sheet = "All Games") %>%
-  clean_names() %>% relocate(projection, .before = score) %>% select(-starts_with("vs_tm_"))
+  clean_names() %>%
+  mutate(result = ifelse(score > opponent_score, 1, 0)) %>%
+  group_by(ov_wk) %>%
+  mutate(ov_wins = order(order(score, decreasing = FALSE)) - 1) %>%
+  mutate(ov_losses = order(order(score, decreasing = TRUE)) - 1) %>%
+  mutate(opp_ov_wins = order(order(opponent_score, decreasing = FALSE)) - 1) %>%
+  mutate(opp_ov_losses = order(order(opponent_score, decreasing = TRUE)) - 1) %>%
+  ungroup()
 #find current season and current week
-CS = unique(AllGames$season); CS = CS[1] + length(CS) - 1
-CW = AllGames %>% filter(season==CS) %>% filter(!is.na(score)) %>% filter(score>0) %>% arrange(desc(week)); CW = CW[[1,3]]
+CS = unique(AllGames$season) %>% max()
+CW = AllGames %>% filter(season==CS) %>% filter(!is.na(score)) %>% filter(score>0) %>% 
+  arrange(desc(week)) %>% select(week) %>% unlist() %>% max()
 #remove unplayed games
 AllGames = AllGames %>% filter(season<CS | (season==CS & week<=CW))
 
@@ -598,7 +606,7 @@ anim = staticplot + transition_states(wk, transition_length = 4, state_length = 
 #animate the bar graph
 #animate(anim, fps = 20, duration = 30,  width = 1200, height = 1000, end_pause = 120, renderer = gifski_renderer("gganim.gif"))
 
-rm(anim, staticplot, wins_by_week)
+rm(anim, staticplot, points_by_week)
 ```
 
 ```{r}
@@ -654,11 +662,11 @@ rm(Wk1_PF, SeasonTotal, Wk1)
 scoring_records_by_weekly_placement = function(pos, highest=TRUE, n=5){
   pos = pos-1
   #players who scored the xth amount of points in a week
-  filtered = AllGames %>% filter(overall_losses==pos)
+  filtered = AllGames %>% filter(ov_losses==pos)
   #orders rows
   filtered = filtered[order(filtered$score, decreasing = highest),]
   #takes out rows with bye weeks
-  filtered = filtered %>% mutate(overall_games = overall_wins + overall_losses) %>% filter(overall_games==9)
+  filtered = filtered %>% mutate(ov_games = ov_wins + ov_losses) %>% filter(ov_games==9)
   #takes the top n rows
   filtered = filtered[1:n,]
   #picks the columns we want in our table and changes column names to upper case
@@ -765,8 +773,8 @@ longest_undefeated %>%
 ### Most Times Scoring Top x in a Week
 ```{r}
 topx_freq = function(x, since2017=FALSE){
-  #how many times finishing top 3 in a week per team
-  n = AllGames %>% filter(overall_losses<x) %>% count(team)
+  #how many times finishing top x in a week per team
+  n = AllGames %>% filter(ov_losses<x) %>% count(team)
   if(since2017==TRUE){n = n %>% filter(season>2016)}
 
   #how many weeks played per team
@@ -789,7 +797,7 @@ topx_freq = function(x, since2017=FALSE){
     row_spec(color_rows, background = "#F1E5AC")
 }
 
-topx_freq(1)
+topx_freq(4)
 ```
 
 
@@ -828,16 +836,16 @@ afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summariz
 teams4_1 = left_join(teams4_1, afterweek5, by=c('season', 'team'))
 
 #find overall wins for all teams through week 5 and add them as a column in the df of 4-1 teams
-afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summarize(overall_wins = sum(overall_wins))
+afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summarize(ov_wins = sum(ov_wins))
 teams4_1 = left_join(teams4_1, afterweek5, by=c('season', 'team'))
 
 #find overall losses for all teams through week 5 and add them as a column in the df of 4-1 teams
-afterweek5 = afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summarize(overall_losses = sum(overall_losses))
+afterweek5 = afterweek5 = AllGames %>% filter(week<6) %>% group_by(season, team) %>% summarize(ov_losses = sum(ov_losses))
 teams4_1 = left_join(teams4_1, afterweek5, by=c('season', 'team'))
 
 #combine overall wins and losses into a record column
-teams4_1 = teams4_1 %>% arrange(desc(overall_wins)) %>% mutate(overall_record = paste(overall_wins, "-", overall_losses, sep = "")) %>%
-  select(season, team, PF, overall_record)
+teams4_1 = teams4_1 %>% arrange(desc(ov_wins)) %>% mutate(ov_record = paste(ov_wins, "-", ov_losses, sep = "")) %>%
+  select(season, team, PF, ov_record)
 
 #display results
 teams4_1 %>% kable(col.names = c("Season", "Team", "Points", "Overall Record"),
@@ -965,7 +973,7 @@ rm(PL, PL2, PL3, o)
 
 ### Records if Everyone Always Set Their Perfect Lineup
 ```{r}
-a = AllGames %>% filter(season==2022) %>% select(season, week, team, score, perfect_score, opponent, opponent_score)
+a = AllGames %>% filter(season==2022) %>% filter(reg_po=="Regular Season") %>% select(season, week, team, score, perfect_score, opponent, opponent_score)
 opp_perfect_scores = c()
 for(r in 1:nrow(a)){
   wk = a[[r,2]]
@@ -1055,21 +1063,22 @@ ggplot(data = ppg_b4_and_after_w9, aes(x=ppg_b4_wk9, y=ppg_after_wk9)) + geom_po
 rm(a,b,ppg_b4_and_after_w9)
 ```
 
-### Schedule Luck Quantified
+### Schedule Luck Quantified (One Season)
 ```{r}
-luckAG = AllGames %>% filter(season==CS) %>% filter(week<=CW) %>% 
-  select(season, week, team, score, opponent, opponent_score, result, overall_wins, overall_losses) %>%
-  mutate(x_wp = overall_wins/9) %>% 
+luckAG = AllGames %>% filter(season==CS) %>% filter(week<=CW) %>% filter(reg_po=="Regular Season") %>%
+  select(season, week, team, score, opponent, opponent_score, result, ov_wins, ov_losses) %>%
+  mutate(x_wp = ov_wins/9) %>% 
   group_by(team) %>%
   summarise(wins = sum(result), x_wins = sum(x_wp)) %>%
   mutate(luck = wins - x_wins)
 
 
-scores2022 = AllGames %>% filter(season==CS) %>% filter(week<=CW) %>% select(season, week, team, score)
+scores2022 = AllGames %>% filter(season==CS) %>% filter(week<=CW) %>% filter(reg_po=="Regular Season") %>% 
+  select(season, week, team, score)
 sims = data.frame(sim_num = NA, team = NA, x_wins = NA); sims = sims[-1,]
-for(sim in 1:1000){
+for(sim in 1:100){
   for(t in luckAG$team){
-    s = AllGames %>% filter(season==CS) %>% filter(week<=CW) %>% filter(team==t) %>%
+    s = AllGames %>% filter(season==CS) %>% filter(week<=CW) %>% filter(reg_po=="Regular Season") %>% filter(team==t) %>%
       select(season, week, team, score, opponent, opponent_score, result)
     new_sched = sample(s$opponent)
     s$opponent = new_sched
@@ -1087,4 +1096,108 @@ luckAG = full_join(luckAG, a, by=c('team')) %>% mutate(luck2 = wins - x_wins2) %
   arrange(desc(wins))
 
 rm(scores2022, sims, s, line, a, new_sched, sim, t)
+```
+
+##### Schedule Luck All Seasons
+```{r}
+AllSeasonLuck = function(){
+  
+  years = unique(AllGames$season)
+  
+  Luck = data.frame(season=NA, team=NA, wins=NA, x_wins=NA, luck=NA, x_wins2=NA, luck2=NA)
+  Luck = Luck[-1,]
+  
+  AllGames_fixed = AllGames %>% mutate(team = ifelse(season==2016&team=="Nike Simmons", "Seth Lassiter", team))
+  
+  for(y in years){
+  
+    luckAG = AllGames_fixed %>% filter(season==y) %>% filter(week<=CW) %>% filter(reg_po=="Regular Season") %>%
+      select(season, week, team, score, opponent, opponent_score, result, ov_wins, ov_losses) %>%
+      mutate(x_wp = ov_wins/9) %>% 
+      group_by(team) %>%
+      summarise(wins = sum(result), x_wins = sum(x_wp)) %>%
+      mutate(luck = wins - x_wins)
+
+    scores2022 = AllGames_fixed %>% filter(season==y) %>% filter(week<=CW) %>% filter(reg_po=="Regular Season") %>% 
+      select(season, week, team, score)
+    sims = data.frame(sim_num = NA, team = NA, x_wins = NA); sims = sims[-1,]
+    for(sim in 1:100){
+      for(t in luckAG$team){
+        s = AllGames_fixed %>% filter(season==y) %>% filter(week<=CW) %>% filter(reg_po=="Regular Season") %>% filter(team==t) %>%
+          select(season, week, team, score, opponent, opponent_score, result) %>% 
+          mutate(opponent = ifelse(season==2016&opponent=="Nike Simmons", "Seth Lassiter", opponent))
+        new_sched = sample(s$opponent)
+        s$opponent = new_sched
+        s$opponent_score = NA
+        s = left_join(s, scores2022, by=c("season", "week", "opponent"="team")) %>%
+          rename(score=score.x, opp_score=score.y) %>%
+          select(season, week, team, score, opponent, opp_score) %>%
+          mutate(result = ifelse(score>opp_score, 1, 0))
+        line = data.frame(sim_num = sim, team = t, x_wins =sum(s$result))
+        sims = rbind(sims, line)
+      }
+      }
+    a = sims %>% group_by(team) %>% summarise(x_wins2 = mean(x_wins)) 
+    luckAG = full_join(luckAG, a, by=c('team')) %>% mutate(luck2 = wins - x_wins2) %>%
+      arrange(desc(wins)) %>% mutate(season=y) %>% relocate(.before = team)
+    
+    Luck=rbind(Luck, luckAG)
+    
+  }
+  return(Luck)
+  }
+
+a = AllSeasonLuck()
+```
+
+
+### Positional Breakdown
+```{r fig.width=5, fig.height=5}
+pos_breakdown = AllGames %>% filter(season==CS) %>% filter(reg_po!='BYE') %>% group_by(team) %>% 
+  summarise(QB = mean(qb),
+            RB = mean(rb1) + mean(rb2),
+            WR = mean(wr1) + mean(wr2), 
+            TE = mean(te),
+            WR_TE= mean(wr_te),
+            FLEX = mean(flex),
+            DST = mean(dst),
+            PF = mean(score)) %>%
+  arrange(desc(PF)) %>%
+  mutate(QB = round(QB, 1),
+         RB = round(RB, 1),
+         WR = round(WR, 1), 
+         TE = round(TE, 1),
+         WR_TE = round(WR_TE, 1),
+         FLEX = round(FLEX, 1),
+         DST = round(DST, 1),
+         PF = round(PF, 1))
+
+#pivot longer so we can make a stacked bar chart
+pos_breakdown2 = pos_breakdown %>% 
+  pivot_longer(!team, names_to = 'pos', values_to = 'ppg') %>% filter(pos!='PF')
+#abbreviate team names so they fit on the x axis nicer
+pos_breakdown2$team = abbreviate(pos_breakdown2$team, minlength = 2, strict = F)
+
+
+ggplot(pos_breakdown2, aes(x=team, y=ppg, fill=factor(pos, levels = c('QB', 'RB', 'WR', 'TE', 'WR_TE', 'FLEX', 'DST')))) +
+  geom_bar(position = "stack", stat = "identity") +
+  ggtitle("WOFFL Positional Breakdown") +
+  xlab("") + ylab("PPG") +
+  theme_minimal() + theme(legend.position = 'right',
+                          legend.title = element_blank())
+
+pos_breakdown %>% 
+  kable(caption = "2022 WOFFL Positional Breakdown (Per Game)") %>%
+  kable_styling(full_width = F, position = 'center') %>%
+  column_spec(1, border_right = T) %>%
+  column_spec(9, border_left = T) %>%
+  column_spec(2, color='white', background = spec_color(pos_breakdown$QB, option = "D")) %>%
+  column_spec(3, color='white', background = spec_color(pos_breakdown$RB, option = "D")) %>%
+  column_spec(4, color='white', background = spec_color(pos_breakdown$WR, option = "D")) %>%
+  column_spec(5, color='white', background = spec_color(pos_breakdown$TE, option = "D")) %>%
+  column_spec(6, color='white', background = spec_color(pos_breakdown$WR_TE, option = "D")) %>%
+  column_spec(7, color='white', background = spec_color(pos_breakdown$FLEX, option = "D")) %>%
+  column_spec(8, color='white', background = spec_color(pos_breakdown$DST, option = "D"))
+  
+
 ```
