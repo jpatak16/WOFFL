@@ -20,13 +20,33 @@ AllGames = read_excel("AllGames.xlsx", sheet = "All Games") %>%
   mutate(opp_ov_wins = order(order(opponent_score, decreasing = FALSE)) - 1) %>%
   mutate(opp_ov_losses = order(order(opponent_score, decreasing = TRUE)) - 1) %>%
   ungroup()
-#find current season and current week
+#find current season and current week; CW means last week played
 CS = unique(AllGames$season) %>% max()
 CW = AllGames %>% filter(season==CS) %>% filter(!is.na(score)) %>% filter(score>0) %>% 
   arrange(desc(week)) %>% select(week) %>% unlist() %>% max()
+CW = ifelse(CW == -Inf, 0, CW)
 #remove unplayed games
 AllGames = AllGames %>% filter(season<CS | (season==CS & week<=CW))
 
+#use for checking player games after entering more seasons
+# player_games = AllGames%>% filter(season==2019) %>% select(name = qb_name, team = qb_tm) %>% mutate(pos = 'QB') %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = rb1_name, team = rb1_tm) %>% mutate(pos = 'RB')) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = rb2_name, team = rb2_tm) %>% mutate(pos = 'RB')) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = wr1_name, team = wr1_tm) %>% mutate(pos = 'WR')) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = wr2_name, team = wr2_tm) %>% mutate(pos = 'WR')) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = wr_te_name, team = wr_te_tm, pos = wr_te_pos)) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = flex_name, team = flex_tm, pos = flex_pos)) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = te_name, team = te_tm) %>% mutate(pos = 'TE')) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = dst_name, team = dst_tm) %>% mutate(pos = 'DST')) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = b1_name, team = b1_tm, pos = b1_pos)) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = b2_name, team = b2_tm, pos = b2_pos)) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = b3_name, team = b3_tm, pos = b3_pos)) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = b4_name, team = b4_tm, pos = b4_pos)) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = b5_name, team = b5_tm, pos = b5_pos)) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = b6_name, team = b6_tm, pos = b6_pos)) %>%
+#   rbind(AllGames %>% filter(season==2019) %>% select(name = b7_name, team = b7_tm, pos = b7_pos)) %>%
+#   filter(!is.na(name)) %>%
+#   unique()
 ```
 
 ```{r}
@@ -866,7 +886,7 @@ SetPerfectLineup = function(df){
   end_res = data.frame(season = NA, week = NA, team = NA, perfect_score = NA, subs_for_perfect = NA)
   for(r in 1:nrow(df)){
     #skip row if no player level data
-    if(is.na(df[r,'qb'])){next}
+    if(is.na(df[r,'qb_name'])){next}
     #basic info
     tm = df[[r,'team']]
     szn = df[[r,'season']]
@@ -874,24 +894,24 @@ SetPerfectLineup = function(df){
     #empty df for a list of players
     player_list = data.frame(Name= NA, Pos = NA, Pts = NA); player_list = player_list[-1,]
     #list of players and their score
-    #fake names serve the purpose of an ID for the player when filling the roster
-    player_list[1,2] = "QB"; player_list[1,3] = df[r, 'qb']; player_list[1,1] = "Eli Manning"
-    player_list[2,2] = "RB"; player_list[2,3] = df[r, 'rb1']; player_list[2,1] = "LaDainian Tomlinson"
-    player_list[3,2] = "RB"; player_list[3,3] = df[r, 'rb2']; player_list[3,1] = "Brandon Jacobs"
-    player_list[4,2] = "WR"; player_list[4,3] = df[r, 'wr1']; player_list[4,1] = "Odell Beckham Jr."
-    player_list[5,2] = "WR"; player_list[5,3] = df[r, 'wr2']; player_list[5,1] = "Victor Cruz"
-    player_list[6,2] = "TE"; player_list[6,3] = df[r, 'te']; player_list[6,1] = "Jeremy Shockey"
-    player_list[7,2] = "DST"; player_list[7,3] = df[r, 'dst']; player_list[7,1] = "Giants"
-    player_list[8,2] = df[r,'wr_te_pos']; player_list[8,3] = df[r, 'wr_te']; player_list[8,1] = "Josh Gordon"
-    player_list[9,2] = df[r,'flex_pos']; player_list[9,3] = df[r, 'flex']; player_list[9,1] = "Doug Martin"
+    #the teams list of players for the week
+    player_list[1,2] = "QB"; player_list[1,3] = df[r, 'qb_pts']; player_list[1,1] = df[r, 'qb_name']
+    player_list[2,2] = "RB"; player_list[2,3] = df[r, 'rb1_pts']; player_list[2,1] = df[r, 'rb1_name']
+    player_list[3,2] = "RB"; player_list[3,3] = df[r, 'rb2_pts']; player_list[3,1] = df[r, 'rb2_name']
+    player_list[4,2] = "WR"; player_list[4,3] = df[r, 'wr1_pts']; player_list[4,1] = df[r, 'wr1_name']
+    player_list[5,2] = "WR"; player_list[5,3] = df[r, 'wr2_pts']; player_list[5,1] = df[r, 'wr2_name']
+    player_list[6,2] = "TE"; player_list[6,3] = df[r, 'te_pts']; player_list[6,1] = df[r, 'te_name']
+    player_list[7,2] = "DST"; player_list[7,3] = df[r, 'dst_pts']; player_list[7,1] = df[r, 'dst_name']
+    player_list[8,2] = df[r,'wr_te_pos']; player_list[8,3] = df[r, 'wr_te_pts']; player_list[8,1] = df[r, 'wr_te_name']
+    player_list[9,2] = df[r,'flex_pos']; player_list[9,3] = df[r, 'flex_pts']; player_list[9,1] = df[r, 'flex_name']
     original_starters = player_list$Name
-    player_list[10,2] = df[r,'b1_pos']; player_list[10,3] = df[r, 'b1']; player_list[10,1] = "Andre Johnson"
-    player_list[11,2] = df[r,'b2_pos']; player_list[11,3] = df[r, 'b2']; player_list[11,1] = "Calvin Johnson"
-    player_list[12,2] = df[r,'b3_pos']; player_list[12,3] = df[r, 'b3']; player_list[12,1] = "Johnny Manziel"
-    player_list[13,2] = df[r,'b4_pos']; player_list[13,3] = df[r, 'b4']; player_list[13,1] = "Michael Strahan"
-    player_list[14,2] = df[r,'b5_pos']; player_list[14,3] = df[r, 'b5']; player_list[14,1] = "Tom Coughlin"
-    player_list[15,2] = df[r,'b6_pos']; player_list[15,3] = df[r, 'b6']; player_list[15,1] = "Rueben Randle"
-    player_list[16,2] = df[r,'b7_pos']; player_list[16,3] = df[r, 'b7']; player_list[16,1] = "David Tyree"
+    player_list[10,2] = df[r,'b1_pos']; player_list[10,3] = df[r, 'b1_pts']; player_list[10,1] = df[r, 'b1_name']
+    player_list[11,2] = df[r,'b2_pos']; player_list[11,3] = df[r, 'b2_pts']; player_list[11,1] = df[r, 'b2_name']
+    player_list[12,2] = df[r,'b3_pos']; player_list[12,3] = df[r, 'b3_pts']; player_list[12,1] = df[r, 'b3_name']
+    player_list[13,2] = df[r,'b4_pos']; player_list[13,3] = df[r, 'b4_pts']; player_list[13,1] = df[r, 'b4_name']
+    player_list[14,2] = df[r,'b5_pos']; player_list[14,3] = df[r, 'b5_pts']; player_list[14,1] = df[r, 'b5_name']
+    player_list[15,2] = df[r,'b6_pos']; player_list[15,3] = df[r, 'b6_pts']; player_list[15,1] = df[r, 'b6_name']
+    player_list[16,2] = df[r,'b7_pos']; player_list[16,3] = df[r, 'b7_pts']; player_list[16,1] = df[r, 'b7_name']
     player_list = player_list %>% filter(!is.na(Pos))
     #fill out a perfect roster
     perfect_roster = data.frame(Name=NA, Pos=NA, Pts=NA); perfect_roster = perfect_roster[-1,]
@@ -927,14 +947,16 @@ SetPerfectLineup = function(df){
   return(df)
 }
 
-AllGames = SetPerfectLineup(AllGames) %>% relocate(perfect_score, .after = score) %>% relocate(subs_for_perfect, .after = perfect_score)
+#AllGames = SetPerfectLineup(AllGames) %>% relocate(perfect_score, .after = score) %>% relocate(subs_for_perfect, .after = perfect_score)
 ```
 
 
 ### Possible Points vs PF
 ```{r fig.width=8, fig.height=15}
 #find how teams did compared to perfect and projected scores
-PL = AllGames %>% filter(season==2022) %>% 
+AllGames = AllGames %>% 
+  mutate(projection = qb_proj + rb1_proj + rb2_proj + wr1_proj + wr2_proj + wr_te_proj + te_proj + flex_proj + dst_proj)
+PL = AllGames %>% filter(season==2019) %>% 
   select(season, week, team, score, projection, perfect_score, subs_for_perfect) %>% group_by(team) %>% 
   summarise(projection = sum(projection), score = sum(score), perfect_score = sum(perfect_score), subs_for_perfect = sum(subs_for_perfect)) %>%
   mutate(percent_of_projection = round((score / projection)*100, digits = 2), 
@@ -973,7 +995,7 @@ rm(PL, PL2, PL3, o)
 
 ### Records if Everyone Always Set Their Perfect Lineup
 ```{r}
-a = AllGames %>% filter(season==2022) %>% filter(reg_po=="Regular Season") %>% select(season, week, team, score, perfect_score, opponent, opponent_score)
+a = AllGames %>% filter(season==2019) %>% filter(reg_po=="Regular Season") %>% select(season, week, team, score, perfect_score, opponent, opponent_score)
 opp_perfect_scores = c()
 for(r in 1:nrow(a)){
   wk = a[[r,2]]
@@ -1147,20 +1169,20 @@ AllSeasonLuck = function(){
   return(Luck)
   }
 
-a = AllSeasonLuck()
+#a = AllSeasonLuck()
 ```
 
 
 ### Positional Breakdown
 ```{r fig.width=5, fig.height=5}
 pos_breakdown = AllGames %>% filter(season==CS) %>% filter(reg_po!='BYE') %>% group_by(team) %>% 
-  summarise(QB = mean(qb),
-            RB = mean(rb1) + mean(rb2),
-            WR = mean(wr1) + mean(wr2), 
-            TE = mean(te),
-            WR_TE= mean(wr_te),
-            FLEX = mean(flex),
-            DST = mean(dst),
+  summarise(QB = mean(qb_pts),
+            RB = mean(rb1_pts) + mean(rb2_pts),
+            WR = mean(wr1_pts) + mean(wr2_pts), 
+            TE = mean(te_pts),
+            WR_TE= mean(wr_te_pts),
+            FLEX = mean(flex_pts),
+            DST = mean(dst_pts),
             PF = mean(score)) %>%
   arrange(desc(PF)) %>%
   mutate(QB = round(QB, 1),
