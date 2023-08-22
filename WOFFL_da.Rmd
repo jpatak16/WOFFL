@@ -29,24 +29,30 @@ CW = ifelse(CW == -Inf, 0, CW)
 AllGames = AllGames %>% filter(season<CS | (season==CS & week<=CW))
 
 #use for checking player games after entering more seasons
-# player_games = AllGames%>% filter(season==2019) %>% select(name = qb_name, team = qb_tm) %>% mutate(pos = 'QB') %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = rb1_name, team = rb1_tm) %>% mutate(pos = 'RB')) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = rb2_name, team = rb2_tm) %>% mutate(pos = 'RB')) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = wr1_name, team = wr1_tm) %>% mutate(pos = 'WR')) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = wr2_name, team = wr2_tm) %>% mutate(pos = 'WR')) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = wr_te_name, team = wr_te_tm, pos = wr_te_pos)) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = flex_name, team = flex_tm, pos = flex_pos)) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = te_name, team = te_tm) %>% mutate(pos = 'TE')) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = dst_name, team = dst_tm) %>% mutate(pos = 'DST')) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = b1_name, team = b1_tm, pos = b1_pos)) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = b2_name, team = b2_tm, pos = b2_pos)) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = b3_name, team = b3_tm, pos = b3_pos)) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = b4_name, team = b4_tm, pos = b4_pos)) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = b5_name, team = b5_tm, pos = b5_pos)) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = b6_name, team = b6_tm, pos = b6_pos)) %>%
-#   rbind(AllGames %>% filter(season==2019) %>% select(name = b7_name, team = b7_tm, pos = b7_pos)) %>%
+# player_games = AllGames%>% filter(season==2020) %>% select(name = qb_name, team = qb_tm) %>% mutate(pos = 'QB') %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = rb1_name, team = rb1_tm) %>% mutate(pos = 'RB')) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = rb2_name, team = rb2_tm) %>% mutate(pos = 'RB')) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = wr1_name, team = wr1_tm) %>% mutate(pos = 'WR')) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = wr2_name, team = wr2_tm) %>% mutate(pos = 'WR')) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = wr_te_name, team = wr_te_tm, pos = wr_te_pos)) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = flex_name, team = flex_tm, pos = flex_pos)) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = te_name, team = te_tm) %>% mutate(pos = 'TE')) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = dst_name, team = dst_tm) %>% mutate(pos = 'DST')) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = b1_name, team = b1_tm, pos = b1_pos)) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = b2_name, team = b2_tm, pos = b2_pos)) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = b3_name, team = b3_tm, pos = b3_pos)) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = b4_name, team = b4_tm, pos = b4_pos)) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = b5_name, team = b5_tm, pos = b5_pos)) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = b6_name, team = b6_tm, pos = b6_pos)) %>%
+#   rbind(AllGames %>% filter(season==2020) %>% select(name = b7_name, team = b7_tm, pos = b7_pos)) %>%
 #   filter(!is.na(name)) %>%
 #   unique()
+
+#test to make sure scores add up to scoring total
+# scores = AllGames %>% filter(season==2020) %>%
+#   mutate(added_score = qb_pts + rb1_pts + rb2_pts + wr1_pts + wr2_pts + wr_te_pts + te_pts + flex_pts + dst_pts,
+#          diff = abs(score - added_score)) %>%
+#   select(season, week, team, score, added_score, diff)
 ```
 
 ```{r}
