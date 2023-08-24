@@ -13,7 +13,7 @@ p_load(dplyr, readxl, janitor, tidyr, openxlsx)
 #create variable for season we want to simulate the rest of
 CurrentSeason = 2022
 #import data set
-SeasonGames = read_excel("AllGames.xlsx", sheet = "All Games") %>%
+SeasonGames = read_excel("WOFFL_stats_portal/AllGames.xlsx", sheet = "All Games") %>%
   clean_names() %>%
   filter(season==CurrentSeason) %>%
   #remove extra things we don't need

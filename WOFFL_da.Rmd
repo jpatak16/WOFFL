@@ -11,7 +11,7 @@ p_load(dplyr, stargazer, data.table, formattable, tidyr, ggplot2, readxl, gganim
 
 ```{r}
 #import data set
-AllGames = read_excel("AllGames.xlsx", sheet = "All Games") %>%
+AllGames = read_excel("WOFFL_stats_portal/AllGames.xlsx", sheet = "All Games") %>%
   clean_names() %>%
   mutate(result = ifelse(score > opponent_score, 1, 0)) %>%
   group_by(ov_wk) %>%
