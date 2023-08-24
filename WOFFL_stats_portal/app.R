@@ -22,8 +22,8 @@ week_selector_options = AllGames %>% filter(season==CS) %>% select(week) %>% unl
 
 ui = navbarPage("WOFFL Portal", fluid = TRUE,
                 tabPanel("Weekly Scoreboard",
-                         fluidRow(column(9, h1(span("White Oak Fantasy Football League Portal", style = 'color:#8A8A8A;')), 
-                                         h1(span("Weekly Scoreboard", style = 'font-size: 60px; font-weight: bold; color:#FFFFFF;'))),
+                         fluidRow(column(9, h1(span("White Oak Fantasy Football League Portal", style = 'color:#8A8A8A; text-shadow: black 0.0em 0.1em 0.2em')), 
+                                         h1(span("Weekly Scoreboard", style = 'font-size: 60px; font-weight: bold; color:#FFFFFF; text-shadow: black 0.0em 0.18em 0.2em'))),
                                   column(3, img(src="3d.jpg", height = 150, width = 210)),
                                   style = 'margin-top:-20px; padding-top:10px; padding-bottom:10px; background-color:#580515'),
                          fluidRow(column(12, align='center', selectInput("week", "Week Selector", week_selector_options)), 
