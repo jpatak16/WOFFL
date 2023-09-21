@@ -6,7 +6,7 @@ runs = 20000
 #create variable for season we want to simulate the rest of
 CS = 2023
 #import data sets
-SeasonGames = read_excel("WOFFL_stats_portal/AllGames.xlsx", sheet = "All Games") %>%
+SeasonGames = read.csv("WOFFL_stats_portal/AllGames.csv") %>%
   clean_names() %>%
   filter(season==CS) %>%
   #remove extra things we don't need
@@ -16,15 +16,15 @@ SeasonGames = read_excel("WOFFL_stats_portal/AllGames.xlsx", sheet = "All Games"
          opponent_score = ifelse(opponent_score==0, NA, opponent_score),
          result = ifelse(is.na(score), NA, result))
 
-AllGames = read_excel("WOFFL_stats_portal/AllGames.xlsx", sheet = "All Games") %>%
+AllGames = read.csv("WOFFL_stats_portal/AllGames.csv") %>%
   clean_names()
 
 progress_bar = txtProgressBar(min=0, max=runs, style = 3, char="=")
 
 simulate_season = function(n){
   
-  weeks_played = if(SeasonGames %>% filter(!is.na(score)) %>% unique() %>% nrow() %>% as.numeric() <= 13 ){
-    SeasonGames %>% filter(!is.na(score)) %>% unique() %>% nrow() %>% as.numeric()
+  weeks_played = if(SeasonGames %>% filter(!is.na(score)) %>% select(week) %>% unique() %>% nrow() %>% as.numeric() <= 13 ){
+    SeasonGames %>% filter(!is.na(score)) %>% select(week) %>% unique() %>% nrow() %>% as.numeric()
   } else{13}
   weeks_remaining = 13 - weeks_played
   total_weeks = weeks_played + weeks_remaining
@@ -58,12 +58,11 @@ simulate_season = function(n){
   hist_stats = AllGames %>% filter(season<CS) %>% group_by(team) %>% summarise(hist_mean = mean(score, na.rm=T), hist_sd = sd(score, na.rm=T))
   l5_stats = SeasonGames %>% filter(week > weeks_played-5,
                                     week <= weeks_played) %>%
-    mutate(across(everything(), ~ ifelse(is.na(.), rnorm(1, 95, 20), .))) %>%
-    group_by(team) %>% summarise(l5_mean = mean(score), l5_sd = sd(score)) %>%
+    group_by(team) %>% summarise(l5_mean = mean(score, na.rm = T), l5_sd = sd(score, na.rm=T)) %>%
     mutate(team = as.character(team)) %>%
     right_join(SeasonGames %>% select(team) %>% unique(), by = 'team') %>%
     mutate(l5_mean = ifelse(is.na(l5_mean), 0, l5_mean),
-           l5_sd = ifelse(is.na(l5_sd), 0, l5_sd))
+           l5_sd = ifelse(is.na(l5_sd), 1, l5_sd))
   
   team_stats = team_stats %>% 
     left_join(hist_stats, by='team') %>% 
@@ -525,9 +524,9 @@ simulate_season = function(n){
 a = simulate_season(runs)
 
 simulated_season_results = a[[1]] %>%
-  mutate(wk = SeasonGames %>% filter(!is.na(score)) %>% unique() %>% nrow() %>% as.numeric())
-all_simulated_results = a[[2]]
+  mutate(wk = SeasonGames %>% filter(!is.na(score)) %>% select(week) %>% unique() %>% nrow() %>% as.numeric())
 
+all_simulated_results = a[[2]] 
 
 path_out = "C:/Users/jerem/Documents/Fantasy/2023/sim_results_2023.csv"
-read.csv(path_out) %>% rbind(simulated_season_results) %>% write.csv(path_out, simulated_season_results)
+read.csv(path_out) %>% rbind(simulated_season_results) %>% write.csv(path_out, row.names = F)

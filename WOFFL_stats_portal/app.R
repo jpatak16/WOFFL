@@ -1,16 +1,14 @@
 library(shiny)
 library(pacman)
-p_load(dplyr, readxl, magrittr, janitor, httr, jsonlite, gt, gtExtras, tidyr)
+p_load(dplyr, readxl, magrittr, janitor, httr, jsonlite, gt, gtExtras, tidyr, ggplot2)
 
 AllGames = read.csv("AllGames.csv") %>%
   clean_names() %>%
   mutate(result = ifelse(score > opponent_score, 1, 0))
 
 woffl_id = 313259
-dat <- ffl_api(leagueId = 313259, view = c("mScoreboard", "mRoster"), seasonId = 2023)
 
 CS = unique(AllGames$season) %>% max()
-CW = dat$scoringPeriodId
 
 week_selector_options = c("Week 1" = 1,
                           "Week 2" = 2,
@@ -87,6 +85,359 @@ gt_merge_img_circle<-function(gt_object, col1, col2, col3, palette = c("black", 
                                             <div style='line-height:{font_size[2]}'><span style ='float:left;font-weight:{font_weight[2]};color:{colors[2]};font-size:{font_size[2]}'>{data_in2}</span>
                                             <span style ='float:right;font-weight:{font_weight[2]};color:{colors[2]};font-size:{font_size[2]}'>{data_in3}</span></div>")}) %>% 
     cols_hide(columns = c({{col2}}, {{col3}}))}
+
+gt_merge_stack_with_plots<-function(gt_object, week, col1, col2, col3, col4, palette = c("black", "grey"), 
+                              ..., small_cap = TRUE, font_size = c("14px", "10px"), font_weight = c("bold", "bold"), 
+                              max_wins=16, width=max_wins/.65, color1="#013369", color2="#D50A0A", color3="gray",
+                              height_plot = 7, palette2=c("black", "black", "purple", "green", "lightgrey"),
+                              fig_dim=c(height_plot, width), same_limit = TRUE, type = "default", label = TRUE) {
+  
+  colors <- scales::col2hcl(palette, ...)
+  col1_bare <- rlang::enexpr(col1) %>% rlang::as_string()
+  row_name_var <- gt_object[["_boxhead"]][["var"]][which(gt_object[["_boxhead"]][["type"]] == "stub")]
+  data_in2 <- gtExtras::gt_index(gt_object, column = {{col2}})
+  data_in3 <- gtExtras::gt_index(gt_object, column = {{col3}})
+  
+  list_vals <- gt_index(gt_object = gt_object, {{col3}}, as_vector = TRUE)
+  
+  plot_fn_pill <- function(vals) {
+    if (all(is.na(vals) | is.null(vals))) {
+      plot_out <- ggplot() +
+        theme_void()
+    } else {
+      input_data <- data.frame(
+        x = 1:length(vals),
+        xend = 1:length(vals),
+        y = ifelse(vals == 0.5, 0.4, vals),
+        yend = ifelse(vals == 0, 0.6, ifelse(vals > 0.5, 0.4, 0.6)),
+        color = ifelse(vals == 0, color2, ifelse(vals == 1, color1, color3))
+      )
+      
+      plot_out <- ggplot(input_data) +
+        geom_segment(
+          aes(
+            x = .data$x,
+            xend = .data$xend,
+            y = .data$y,
+            yend = .data$yend,
+            color = I(.data$color)
+          ),
+          linewidth = 1,
+          lineend = "round"
+        ) +
+        scale_x_continuous(limits = c(0.5, max_wins + 0.5)) +
+        scale_y_continuous(limits = c(-.2, 1.2)) +
+        theme_void()
+    }
+    
+    out_name <- file.path(
+      tempfile(pattern = "file", tmpdir = tempdir(), fileext = ".svg")
+    )
+    
+    ggsave(
+      out_name,
+      plot = plot_out,
+      dpi = 20,
+      height = height_plot,
+      width = width,
+      units = "mm"
+    )
+    
+    img_plot <- out_name %>%
+      readLines() %>%
+      paste0(collapse = "") %>%
+      gt::html()
+    
+    on.exit(file.remove(out_name), add = TRUE)
+    
+    img_plot
+  }
+  
+  col_bare <- dplyr::select(gt_object[["_data"]], {{col4}}) %>% names()
+  
+  list_data_in <- gt_index(gt_object, col_bare, as_vector = TRUE)
+  
+  data_in <- unlist(list_data_in)
+  
+  total_rng <- grDevices::extendrange(data_in, r = range(data_in, na.rm = TRUE), f = 0.02)
+  
+  plot_fn_spark <- function(list_data_in) {
+    if (all(list_data_in %in% c(NA, NULL))) {
+      return("<div></div>")
+    }
+    
+    # vals <- as.double(stats::na.omit(list_data_in))
+    vals <- as.double(list_data_in)
+    
+    max_val <- max(vals, na.rm = TRUE)
+    min_val <- min(vals, na.rm = TRUE)
+    
+    x_max <- vals[vals == max_val]
+    x_min <- vals[vals == min_val]
+    
+    point_data <- dplyr::tibble(
+      x = c(
+        c(1:length(vals))[vals == min_val],
+        c(1:length(vals))[vals == max_val]
+      ),
+      y = c(x_min, x_max),
+      colors = c(
+        rep(palette2[3], length(x_min)),
+        rep(palette2[4], length(x_max))
+      )
+    )
+    
+    input_data <- dplyr::tibble(
+      x = 1:length(vals),
+      y = vals
+    )
+    
+    plot_base <- ggplot(input_data) +
+      theme_void()
+    
+    med_y_rnd <- round(stats::median(input_data$y, na.rm = TRUE))
+    last_val_label <- input_data[nrow(vals), 2]
+    
+    if (isTRUE(same_limit) && isFALSE(label)) {
+      plot_base <- plot_base +
+        scale_y_continuous(expand = expansion(mult = 0.05)) +
+        coord_cartesian(
+          clip = "off",
+          ylim = grDevices::extendrange(total_rng, f = 0.09)
+        )
+    } else if (isFALSE(same_limit) && isFALSE(label)) {
+      plot_base <- plot_base +
+        scale_y_continuous(expand = expansion(mult = 0.05)) +
+        coord_cartesian(
+          clip = "off",
+          ylim = grDevices::extendrange(vals, f = 0.09)
+        )
+    } else if (isFALSE(same_limit) && isTRUE(label)) {
+      plot_base <- plot_base +
+        geom_text(
+          data = filter(input_data, .data$x == max(.data$x)),
+          aes(
+            x = .data$x,
+            y = .data$y,
+            label = scales::label_number(
+              scale_cut = scales::cut_short_scale(),
+              accuracy = if (med_y_rnd > 0) {
+                .1
+              } else if (med_y_rnd == 0) {
+                .01
+              }
+            )(.data$y)
+          ),
+          size = 2,
+          family = "mono",
+          hjust = 0,
+          vjust = 0.5,
+          position = position_nudge(x = max(input_data$x) * 0.05),
+          color = palette[2],
+          na.rm = TRUE
+        ) +
+        scale_y_continuous(expand = expansion(mult = 0.05)) +
+        coord_cartesian(
+          clip = "off",
+          ylim = grDevices::extendrange(vals, f = 0.09),
+          xlim = c(0.25, length(vals) * 1.25)
+        )
+    } else if (isTRUE(same_limit) && isTRUE(label)) {
+      plot_base <- plot_base +
+        geom_text(
+          data = filter(input_data, .data$x == max(.data$x)),
+          aes(
+            x = .data$x,
+            y = .data$y,
+            label = scales::label_number(
+              scale_cut = scales::cut_short_scale(),
+              accuracy = if (med_y_rnd > 0) {
+                .1
+              } else if (med_y_rnd == 0) {
+                .01
+              }
+            )(.data$y)
+          ),
+          size = 2,
+          family = "mono",
+          hjust = 0,
+          vjust = 0.5,
+          position = position_nudge(x = max(input_data$x) * 0.05),
+          color = palette2[2],
+          na.rm = TRUE
+        ) +
+        scale_y_continuous(expand = expansion(mult = 0.05)) +
+        coord_cartesian(
+          clip = "off",
+          ylim = grDevices::extendrange(total_rng, f = 0.09),
+          xlim = c(0.25, length(vals) * 1.25)
+        )
+    }
+    
+    plot_out <- plot_base +
+      geom_line(
+        aes(x = .data$x, y = .data$y, group = 1),
+        linewidth = 0.5,
+        color = palette2[1],
+        na.rm = TRUE
+      ) +
+      geom_point(
+        data = filter(input_data, .data$x == max(.data$x)),
+        aes(x = .data$x, y = .data$y),
+        size = 0.5,
+        color = palette2[2],
+        na.rm = TRUE
+      ) +
+      geom_point(
+        data = point_data,
+        aes(x = .data$x, y = .data$y, color = I(.data$colors), group = 1),
+        size = 0.5,
+        na.rm = TRUE
+      )
+    
+    ### Shaded area
+    if (type == "shaded") {
+      plot_out$layers <- c(
+        geom_area(
+          aes(x = .data$x, y = .data$y),
+          fill = palette2[5],
+          alpha = 0.75,
+          na.rm = TRUE
+        ),
+        plot_out$layers
+      )
+      
+      ### Horizontal ref line at median
+    } else if (type == "ref_median") {
+      plot_out$layers <- c(
+        geom_segment(
+          aes(
+            x = min(.data$x),
+            y = stats::median(.data$y),
+            xend = max(.data$x),
+            yend = stats::median(.data$y)
+          ),
+          color = palette2[5],
+          linewidth = 0.1,
+          na.rm = TRUE
+        ),
+        plot_out$layers
+      )
+      ### dots on all points
+    } else if (type == "points") {
+      plot_out$layers <- c(
+        geom_point(
+          aes(x = .data$x, y = .data$y),
+          color = palette2[5],
+          size = 0.4,
+          na.rm = TRUE
+        ),
+        plot_out$layers
+      )
+      ### Horizontal ref line at mean
+    } else if (type == "ref_mean") {
+      plot_out$layers <- c(
+        geom_segment(
+          aes(
+            x = min(.data$x),
+            y = mean(.data$y),
+            xend = max(.data$x),
+            yend = mean(.data$y)
+          ),
+          color = palette2[5],
+          linewidth = 0.1,
+          na.rm = TRUE
+        ),
+        plot_out$layers
+      )
+      ### Horizontal ref line at last point
+    } else if (type == "ref_last") {
+      plot_out$layers <- c(
+        geom_segment(
+          aes(
+            x = min(.data$x),
+            y = last(.data$y),
+            xend = max(.data$x),
+            yend = last(.data$y)
+          ),
+          color = palette2[5],
+          linewidth = 0.1,
+          na.rm = TRUE
+        ),
+        plot_out$layers
+      )
+      ### Horizontal area/ribbon for 25/75 interquantile range
+    } else if (type == "ref_iqr") {
+      ribbon_df <- input_data %>%
+        summarise(
+          q25 = stats::quantile(.data$y, 0.25),
+          q75 = stats::quantile(.data$y, 0.75)
+        )
+      
+      plot_out$layers <- c(
+        geom_ribbon(
+          aes(x = .data$x, ymin = ribbon_df$q25, ymax = ribbon_df$q75),
+          fill = palette2[5],
+          alpha = 0.5,
+          na.rm = TRUE
+        ),
+        geom_segment(
+          aes(
+            x = min(.data$x),
+            y = stats::median(.data$y),
+            xend = max(.data$x),
+            yend = stats::median(.data$y)
+          ),
+          color = palette2[5],
+          linewidth = 0.1,
+          na.rm = TRUE
+        ),
+        plot_out$layers
+      )
+    }
+    
+    out_name <- file.path(
+      tempfile(pattern = "file", tmpdir = tempdir(), fileext = ".svg")
+    )
+    
+    ggsave(
+      out_name,
+      plot = plot_out,
+      dpi = 25.4,
+      height = fig_dim[1],
+      width = fig_dim[2],
+      units = "mm"
+    )
+    
+    img_plot <- out_name %>%
+      readLines() %>%
+      paste0(collapse = "") %>%
+      gt::html()
+    
+    on.exit(file.remove(out_name), add = TRUE)
+    
+    img_plot
+  }
+  
+  
+  gt_object %>% text_transform(locations = 
+                                 if (isTRUE(row_name_var == col1_bare)) {cells_stub(rows = gt::everything())
+                                   
+                                 } else {cells_body(columns = {{col1}})}, 
+                               fn = function(x) {
+                                 if (small_cap) {font_variant <- "small-caps"
+                                 } else {font_variant <- "normal"}
+                                 if(week == 1){glue::glue("<div style='line-height:{font_size[1]}; padding-top:7px'><div style='font-weight:{font_weight[1]};font-variant:{font_variant};color:{colors[1]};font-size:{font_size[1]}'>{x}</div></div>
+                                            <div style='line-height:{font_size[2]}; padding-top:4px'><div style ='font-weight:{font_weight[2]};color:{colors[2]};font-size:{font_size[2]}'>{data_in2}</div></div>
+                                            <div style='line-height:50px'><span style='background-image: {lapply(list_vals,plot_fn_pill)}</span></div>")}
+                                 else{glue::glue("<div style='line-height:{font_size[1]}; padding-top:7px'><div style='font-weight:{font_weight[1]};font-variant:{font_variant};color:{colors[1]};font-size:{font_size[1]}'>{x}</div></div>
+                                            <div style='line-height:{font_size[2]}; padding-top:4px'><div style ='font-weight:{font_weight[2]};color:{colors[2]};font-size:{font_size[2]}'>{data_in2}</div></div>
+                                            <div style='line-height:50px'><span style='background-image: {lapply(list_vals,plot_fn_pill)}</span><span style='background-image: {lapply(list_data_in,plot_fn_spark)}</span></div>")}
+                                 
+                                 }) %>% 
+    cols_hide(columns = c({{col2}}, {{col3}}, {{col4}}))}
+
+
 
 ffl_api <- function(leagueId = ffl_id(), view = NULL, leagueHistory = FALSE,
                     seasonId = 2022, scoringPeriodId = NULL, ...) {
@@ -178,13 +529,17 @@ live_scoring <- function(leagueId = ffl_id(), yetToPlay = FALSE,
 yet_to_play <- function(){
   blank = data.frame()
   for(i in 1:11){
-    finished = dat$teams$roster$entries[[i]]$playerPoolEntry$rosterLocked
-    pos = dat$teams$roster$entries[[1]]$lineupSlotId
-    df = data.frame(team_id = i, finished_game = finished, position_id = pos)
-    blank = rbind(blank, df)
+    df = dat$teams$roster$entries[[i]]
+    finished = df$playerPoolEntry$rosterLocked
+    pos = df$lineupSlotId
+    df2 = data.frame(team_id = i, finished_game = finished, position_id = pos)
+    blank = rbind(blank, df2)
   }
   return(blank)
 }
+
+dat <- ffl_api(leagueId = 313259, view = c("mScoreboard", "mRoster"), seasonId = 2023)
+CW = dat$scoringPeriodId
 
 schedule = live_scoring() %>% mutate(totalPointsLive = ifelse(is.na(totalPointsLive), 0, totalPointsLive),
                                      totalProjectedPointsLive = round(totalProjectedPointsLive, digits = 2)) %>%
@@ -204,8 +559,9 @@ team = dat$teams %>% mutate(owner = case_when(id==1 ~ "Jeremy Patak",
                                               id==11 ~ "Cade Palmer",
                                               id==12 ~ ""))
 
-still_playing = yet_to_play() %>% filter(position_id != 20, finished_game==F) %>% group_by(team_id) %>% summarise(still_playing = n()) %>%
-  right_join(team %>% select(id), by = c("team_id" = "id")) %>% mutate(still_playing = ifelse(is.na(still_playing), 0, still_playing))
+still_playing = yet_to_play() %>% filter(position_id != 20, position_id != 21, finished_game==F) %>% group_by(team_id) %>% summarise(still_playing = n()) %>%
+  right_join(team %>% select(id), by = c("team_id" = "id")) %>% mutate(still_playing = ifelse(is.na(still_playing), 0, still_playing),
+                                                                       still_playing = ifelse(team_id == 12, sum(still_playing), still_playing))
 
 ui = navbarPage("WOFFL Portal", fluid = TRUE,
                 tabPanel("Weekly Scoreboard",
@@ -213,7 +569,7 @@ ui = navbarPage("WOFFL Portal", fluid = TRUE,
                                          h1(span("Weekly Scoreboard", style = 'font-size: 60px; font-weight: bold; color:#FFFFFF; text-shadow: black 0.0em 0.18em 0.2em'))),
                                   column(3, img(src="3d.jpg", height = 150, width = 210)),
                                   style = 'margin-top:-20px; padding-top:10px; padding-bottom:10px; background-color:#580515'),
-                         fluidRow(column(12, align='center', selectInput("week", "Week Selector", week_selector_options)), 
+                         fluidRow(column(12, align='center', selectInput("week", "Week Selector", week_selector_options, selected = CW)), 
                                   style = 'padding-top:10px;'),
                          fluidRow(column(12, align='center', uiOutput("playoffs"))),
                          fluidRow(column(6, gt_output('wk_matchup_1')),
@@ -222,14 +578,65 @@ ui = navbarPage("WOFFL Portal", fluid = TRUE,
                                   column(6, gt_output('wk_matchup_4'))),
                          fluidRow(column(6, gt_output('wk_matchup_5')),
                                   column(6, gt_output('wk_matchup_6')))
-                         ) #end of WS tabPanel
+                         ), #end of WS tabPanel
+                tabPanel("Playoff Picture",
+                         fluidRow(column(9, h1(span("White Oak Fantasy Football League Portal", style = 'color:#8A8A8A; text-shadow: black 0.0em 0.1em 0.2em')), 
+                                         h1(span("Playoff Picture", style = 'font-size: 60px; font-weight: bold; color:#FFFFFF; text-shadow: black 0.0em 0.18em 0.2em'))),
+                                  column(3, img(src="3d.jpg", height = 150, width = 210)),
+                                  style = 'margin-top:-20px; padding-top:10px; padding-bottom:10px; background-color:#580515'),
+                         fluidRow(column(4, gt_output('standings')))) #end of PP tabPanel
                 ) #end of navbarPage
 
 
-server = function(input, output) {
+server = function(input, output, session) {
+  
+  session$onSessionEnded(function() {
+    stopApp()
+  })
   
   output$playoffs = renderUI(if(as.numeric(input$week) > 13){img(src="playoffs.gif", height = 300)}
                              else{img(src="playoffs.gif", height = 0)})
+  
+  standings = reactive(team %>%
+                         select(id, logo, name, owner) %>%
+                         filter(id != 12) %>%
+                         left_join(AllGames %>% filter(season == CS, reg_po == "Regular Season") %>% group_by(team) %>% summarise(p_wins = sum(result, na.rm=T)), 
+                                   by = c('owner' = 'team')) %>%
+                         mutate(p_gp = AllGames %>% filter(season==CS, reg_po == "Regular Season", !is.na(score)) %>% select(week) %>% unique() %>% max(),
+                                p_losses = p_gp - p_wins) %>%
+                         left_join(AllGames %>% filter(season==CS, reg_po == "Regular Season") %>% group_by(team) %>% summarise(p_pf = sum(score, na.rm=T), p_pa = sum(opponent_score, na.rm=T)), 
+                                   by = c('owner' = 'team')) %>%
+                         left_join(AllGames %>% 
+                                     filter(season == CS,
+                                            team != "Ghost of Dakota Frantum",
+                                            !is.na(score)) %>%
+                                     group_by(ov_wk) %>%
+                                     mutate(ov_wins = order(order(score, decreasing = FALSE)) - 1,
+                                            ov_losses = order(order(score, decreasing = TRUE)) - 1) %>%
+                                     group_by(team) %>%
+                                     summarise(ov_wins = sum(ov_wins), ov_losses = sum(ov_losses)) %>%
+                                     rename(owner = team)) %>%
+                         left_join(schedule %>% filter(matchupPeriodId == AllGames %>% filter(season==CS, reg_po == "Regular Season", !is.na(score)) %>% select(week) %>% unique() %>% max() %>% sum(1)) %>% select(totalPointsLive, teamId),
+                                   by = c("id" = "teamId")) %>%
+                         left_join(AllGames %>% filter(season == CS, week == AllGames %>% filter(season==CS, reg_po == "Regular Season", !is.na(score)) %>% select(week) %>% unique() %>% max() %>% sum(1)) %>%
+                                     select(owner = team, opponent)) %>%
+                         left_join(team %>% select(opp_id = id, owner), by = c('opponent' = 'owner')) %>%
+                         left_join(schedule %>% filter(matchupPeriodId == AllGames %>% filter(season==CS, reg_po == "Regular Season", !is.na(score)) %>% select(week) %>% unique() %>% max() %>% sum(1)) %>% select(opp_score_live=totalPointsLive, teamId),
+                                   by = c("opp_id" = "teamId")) %>%
+                         mutate(opp_id = ifelse(is.na(opp_id), 12, opp_id),
+                                opp_score_live = ifelse(is.na(opp_score_live), ghost_score(), opp_score_live)) %>%
+                         left_join(still_playing, by = c("id" = "team_id")) %>%
+                         left_join(still_playing %>% rename(opp_still_playing=still_playing), by = c("opp_id" = "team_id")) %>%
+                         mutate(cw_win = ifelse(totalPointsLive>opp_score_live & still_playing==0 & opp_still_playing==0, 1, 0),
+                                cw_gp = ifelse(still_playing==0 & opp_still_playing==0, 1, 0)) %>%
+                         mutate(t_wins = cw_win + p_wins,
+                                t_gp = cw_gp + p_gp,
+                                t_losses = t_gp - t_wins,
+                                t_pf = p_pf + totalPointsLive,
+                                t_pa = p_pa + opp_score_live) %>%
+                         mutate(record = paste0(t_wins, '-', t_losses),
+                                ov_record = paste0(ov_wins, '-', ov_losses)) %>%
+                         select(logo, name, owner, record, ov_record, t_wins, t_losses, t_pf, t_pa, ov_wins, ov_losses))
   
   team_record = reactive(AllGames %>% 
                            filter(season == CS, week < as.numeric(input$week)) %>%
@@ -238,8 +645,9 @@ server = function(input, output) {
                                   ties = ifelse(opponent_score == score & score != 0 , 1, 0)) %>%
                            select(team, wins, losses, ties) %>%
                            group_by(team) %>%
-                           summarise(wins = sum(wins), losses = sum(losses), ties = sum(ties)) %>%
-                           right_join(team %>% select(owner, id), by = c('team'='owner')) %>%
+                           summarise(wins = sum(wins, na.rm = T), losses = sum(losses, na.rm = T), ties = sum(ties, na.rm = T)) %>%
+                           full_join(team %>% select(owner, id), by = c('team'='owner')) %>%
+                           filter(row_number() != 13) %>%
                            mutate(across(c(wins:ties), ~ ifelse(is.na(.), 0, .))) %>%
                            mutate(id = ifelse(team == "Ghost of Dakota Frantum", 12, id)) %>%
                            mutate(record = ifelse(ties==0, paste0("(", wins, "-", losses, ")"), paste0("(", wins, "-", losses, "-", ties, ")"))) %>%
@@ -248,7 +656,7 @@ server = function(input, output) {
   team_ov_record = reactive(AllGames %>% 
                               filter(season == CS,
                                      team != "Ghost of Dakota Frantum",
-                                     week < as.numeric(5)) %>%
+                                     week < as.numeric(input$week)) %>%
                               group_by(ov_wk) %>%
                               mutate(ov_wins = order(order(score, decreasing = FALSE)) - 1,
                                      ov_losses = order(order(score, decreasing = TRUE)) - 1,
@@ -260,6 +668,23 @@ server = function(input, output) {
                               mutate(ov_record = paste0("(", ov_wins, "-", ov_losses, ")"),
                                      ov_record = ifelse(is.na(ov_wins), "", ov_record)) %>%
                               select(id, ov_record))
+  
+  team_wl = reactive(AllGames %>% filter(season == CS, !is.na(team)) %>% 
+                       group_by(team) %>%
+                       mutate(result = ifelse(row_number() < as.numeric(input$week), result, 0.5)) %>%
+                       mutate(result = ifelse(is.na(result), 0.5, result)) %>% 
+                       summarise(wl = list(result)) %>%
+                       left_join(team %>% select(owner, id), by = c('team'='owner')) %>%
+                       mutate(id = ifelse(team=='Ghost of Dakota Frantum', 12, id)) %>%
+                       select(id, wl))
+  
+  team_scores = reactive(AllGames %>% filter(season == CS, !is.na(team)) %>% 
+                           group_by(team) %>%
+                           mutate(score = ifelse(row_number() < as.numeric(input$week), score, NA)) %>%
+                           summarise(scores = list(score)) %>%
+                           left_join(team %>% select(owner, id), by = c('team'='owner')) %>%
+                           mutate(id = ifelse(team=='Ghost of Dakota Frantum', 12, id)) %>%
+                           select(id, scores))
   
   ghost_matchupId = reactive(schedule %>% filter(matchupPeriodId == as.numeric(input$week),
                                                  teamId == 12) %>%
@@ -305,11 +730,13 @@ server = function(input, output) {
                                       left_join(still_playing, by = "team_id") %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
+                                      left_join(team_wl(), by = c("team_id" = "id")) %>%
+                                      left_join(team_scores(), by = c("team_id" = "id")) %>%
                                       mutate(still_playing = case_when(as.numeric(input$week) == CW ~ still_playing,
                                                                        as.numeric(input$week) < CW ~ 0,
                                                                        as.numeric(input$week) > CW ~ 15)) %>%
                                       mutate(projection = ifelse(still_playing == 0, "", projection)) %>% 
-                                      select(logo, name, score, projection, owner, still_playing, record, ov_record) %>%
+                                      select(logo, name, score, projection, owner, still_playing, record, ov_record, wl, scores) %>%
                                       mutate(win = ifelse(sum(still_playing) == 0 & score>mean(score), 1, 0)) %>%
                                       gt() %>% 
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
@@ -317,9 +744,10 @@ server = function(input, output) {
                                       gt_merge_stack(col1 = score, col2 = projection,
                                                      font_size = c('25px', '15px'),
                                                      font_weight = c('bold', 'normal')) %>%
-                                      gt_merge_stack(col1 = name, col2 = owner,
-                                                     font_size = c("25px", "15px"),
-                                                     font_weight = c("bold", "normal")) %>%
+                                      gt_merge_stack_with_plots(week = as.numeric(input$week), 
+                                                                col1 = name, col2 = owner, col3 = wl, col4 = scores,
+                                                                font_size = c("25px", "15px"),
+                                                                font_weight = c("bold", "normal")) %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -381,11 +809,13 @@ server = function(input, output) {
                                       left_join(still_playing, by="team_id") %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
+                                      left_join(team_wl(), by = c("team_id" = "id")) %>%
+                                      left_join(team_scores(), by = c("team_id" = "id")) %>%
                                       mutate(still_playing = case_when(as.numeric(input$week) == CW ~ still_playing,
                                                                        as.numeric(input$week) < CW ~ 0,
                                                                        as.numeric(input$week) > CW ~ 15)) %>%
                                       mutate(projection = ifelse(still_playing == 0, "", projection)) %>%
-                                      select(logo, name, score, projection, owner, still_playing, record, ov_record) %>%
+                                      select(logo, name, score, projection, owner, still_playing, record, ov_record, wl, scores) %>%
                                       mutate(win = ifelse(sum(still_playing) == 0 & score>mean(score), 1, 0)) %>%
                                       gt() %>%
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
@@ -393,9 +823,10 @@ server = function(input, output) {
                                       gt_merge_stack(col1 = score, col2 = projection,
                                                      font_size = c('25px', '15px'),
                                                      font_weight = c('bold', 'normal')) %>%
-                                      gt_merge_stack(col1 = name, col2 = owner,
-                                                     font_size = c("25px", "15px"),
-                                                     font_weight = c("bold", "normal")) %>%
+                                      gt_merge_stack_with_plots(week = as.numeric(input$week),
+                                                                col1 = name, col2 = owner, col3 = wl, col4 = scores,
+                                                                font_size = c("25px", "15px"),
+                                                                font_weight = c("bold", "normal")) %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -457,11 +888,13 @@ server = function(input, output) {
                                       left_join(still_playing, by="team_id") %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
+                                      left_join(team_wl(), by = c("team_id" = "id")) %>%
+                                      left_join(team_scores(), by = c("team_id" = "id")) %>%
                                       mutate(still_playing = case_when(as.numeric(input$week) == CW ~ still_playing,
                                                                        as.numeric(input$week) < CW ~ 0,
                                                                        as.numeric(input$week) > CW ~ 15)) %>%
                                       mutate(projection = ifelse(still_playing == 0, "", projection)) %>%
-                                      select(logo, name, score, projection, owner, still_playing, record, ov_record) %>%
+                                      select(logo, name, score, projection, owner, still_playing, record, ov_record, wl, scores) %>%
                                       mutate(win = ifelse(sum(still_playing) == 0 & score>mean(score), 1, 0)) %>%
                                       gt() %>%
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
@@ -469,9 +902,10 @@ server = function(input, output) {
                                       gt_merge_stack(col1 = score, col2 = projection,
                                                      font_size = c('25px', '15px'),
                                                      font_weight = c('bold', 'normal')) %>%
-                                      gt_merge_stack(col1 = name, col2 = owner,
-                                                     font_size = c("25px", "15px"),
-                                                     font_weight = c("bold", "normal")) %>%
+                                      gt_merge_stack_with_plots(week = as.numeric(input$week),
+                                                                col1 = name, col2 = owner, col3 = wl, col4 = scores,
+                                                                font_size = c("25px", "15px"),
+                                                                font_weight = c("bold", "normal")) %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -533,11 +967,13 @@ server = function(input, output) {
                                       left_join(still_playing, by="team_id") %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
+                                      left_join(team_wl(), by = c("team_id" = "id")) %>%
+                                      left_join(team_scores(), by = c("team_id" = "id")) %>%
                                       mutate(still_playing = case_when(as.numeric(input$week) == CW ~ still_playing,
                                                                        as.numeric(input$week) < CW ~ 0,
                                                                        as.numeric(input$week) > CW ~ 15)) %>%
                                       mutate(projection = ifelse(still_playing == 0, "", projection)) %>%
-                                      select(logo, name, score, projection, owner, still_playing, record, ov_record) %>%
+                                      select(logo, name, score, projection, owner, still_playing, record, ov_record, wl, scores) %>%
                                       mutate(win = ifelse(sum(still_playing) == 0 & score>mean(score), 1, 0)) %>%
                                       gt() %>%
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
@@ -545,9 +981,10 @@ server = function(input, output) {
                                       gt_merge_stack(col1 = score, col2 = projection,
                                                      font_size = c('25px', '15px'),
                                                      font_weight = c('bold', 'normal')) %>%
-                                      gt_merge_stack(col1 = name, col2 = owner,
-                                                     font_size = c("25px", "15px"),
-                                                     font_weight = c("bold", "normal")) %>%
+                                      gt_merge_stack_with_plots(week = as.numeric(input$week),
+                                                                col1 = name, col2 = owner, col3 = wl, col4 = scores,
+                                                                font_size = c("25px", "15px"),
+                                                                font_weight = c("bold", "normal")) %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -609,11 +1046,13 @@ server = function(input, output) {
                                       left_join(still_playing, by="team_id") %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
+                                      left_join(team_wl(), by = c("team_id" = "id")) %>%
+                                      left_join(team_scores(), by = c("team_id" = "id")) %>%
                                       mutate(still_playing = case_when(as.numeric(input$week) == CW ~ still_playing,
                                                                        as.numeric(input$week) < CW ~ 0,
                                                                        as.numeric(input$week) > CW ~ 15)) %>%
                                       mutate(projection = ifelse(still_playing == 0, "", projection)) %>%
-                                      select(logo, name, score, projection, owner, still_playing, record, ov_record) %>%
+                                      select(logo, name, score, projection, owner, still_playing, record, ov_record, wl, scores) %>%
                                       mutate(win = ifelse(sum(still_playing) == 0 & score>mean(score), 1, 0)) %>%
                                       gt() %>%
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
@@ -621,9 +1060,10 @@ server = function(input, output) {
                                       gt_merge_stack(col1 = score, col2 = projection,
                                                      font_size = c('25px', '15px'),
                                                      font_weight = c('bold', 'normal')) %>%
-                                      gt_merge_stack(col1 = name, col2 = owner,
-                                                     font_size = c("25px", "15px"),
-                                                     font_weight = c("bold", "normal")) %>%
+                                      gt_merge_stack_with_plots(week = as.numeric(input$week),
+                                                                col1 = name, col2 = owner, col3 = wl, col4 = scores,
+                                                                font_size = c("25px", "15px"),
+                                                                font_weight = c("bold", "normal")) %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -685,11 +1125,13 @@ server = function(input, output) {
                                       left_join(still_playing, by="team_id") %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
+                                      left_join(team_wl(), by = c("team_id" = "id")) %>%
+                                      left_join(team_scores(), by = c("team_id" = "id")) %>%
                                       mutate(still_playing = case_when(as.numeric(input$week) == CW ~ still_playing,
                                                                        as.numeric(input$week) < CW ~ 0,
                                                                        as.numeric(input$week) > CW ~ 15)) %>%
                                       mutate(projection = ifelse(still_playing == 0, "", projection)) %>%
-                                      select(logo, name, score, projection, owner, still_playing, record, ov_record) %>%
+                                      select(logo, name, score, projection, owner, still_playing, record, ov_record, wl, scores) %>%
                                       mutate(win = ifelse(sum(still_playing) == 0 & score>mean(score), 1, 0)) %>%
                                       gt() %>%
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
@@ -697,9 +1139,10 @@ server = function(input, output) {
                                       gt_merge_stack(col1 = score, col2 = projection,
                                                      font_size = c('25px', '15px'),
                                                      font_weight = c('bold', 'normal')) %>%
-                                      gt_merge_stack(col1 = name, col2 = owner,
-                                                     font_size = c("25px", "15px"),
-                                                     font_weight = c("bold", "normal")) %>%
+                                      gt_merge_stack_with_plots(week = as.numeric(input$week),
+                                                                col1 = name, col2 = owner, col3 = wl, col4 = scores,
+                                                                font_size = c("25px", "15px"),
+                                                                font_weight = c("bold", "normal")) %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -728,6 +1171,31 @@ server = function(input, output) {
                                       fmt_number(columns = c(score, projection),
                                                  drop_trailing_zeros = TRUE)
                                   })
+  
+  output$standings = render_gt(standings() %>%
+                                 arrange(desc(t_wins), desc(t_pf)) %>%
+                                 select(logo, name, owner, record, ov_record, t_pf, t_pa) %>%
+                                 gt() %>%
+                                 gt_img_circle(logo, height = 40) %>%
+                                 gt_merge_stack(name, owner) %>%
+                                 gt_theme_pff() %>%
+                                 cols_label(logo = "",
+                                            name = "Team",
+                                            record = "Record",
+                                            ov_record = "Overall Record",
+                                            t_pf = "PF",
+                                            t_pa = "PA") %>%
+                                 cols_width(logo ~ px(50),
+                                            name ~ px(90),
+                                            record ~ px(50),
+                                            ov_record ~ px(50),
+                                            t_pf ~ px(60),
+                                            t_pa ~ px(60)) %>%
+                                 cols_align(align = "center", columns = c(logo, record, ov_record, t_pf, t_pa)) %>%
+                                 fmt_number(columns = c(t_pf, t_pa), decimals = 1) %>%
+                                 tab_header(title = html("<center><b>STANDINGS</b></center>")) %>%
+                                 tab_options(heading.title.font.size = "18px",
+                                             heading.background.color = "grey"))
   
 }
 
