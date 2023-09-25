@@ -526,17 +526,6 @@ live_scoring <- function(leagueId = ffl_id(), yetToPlay = FALSE,
   
   return(s)
 }
-yet_to_play <- function(){
-  blank = data.frame()
-  for(i in 1:11){
-    df = dat$teams$roster$entries[[i]]
-    finished = df$playerPoolEntry$rosterLocked
-    pos = df$lineupSlotId
-    df2 = data.frame(team_id = i, finished_game = finished, position_id = pos)
-    blank = rbind(blank, df2)
-  }
-  return(blank)
-}
 
 dat <- ffl_api(leagueId = 313259, view = c("mScoreboard", "mRoster"), seasonId = 2023)
 CW = dat$scoringPeriodId
@@ -559,9 +548,12 @@ team = dat$teams %>% mutate(owner = case_when(id==1 ~ "Jeremy Patak",
                                               id==11 ~ "Cade Palmer",
                                               id==12 ~ ""))
 
-still_playing = yet_to_play() %>% filter(position_id != 20, position_id != 21, finished_game==F) %>% group_by(team_id) %>% summarise(still_playing = n()) %>%
-  right_join(team %>% select(id), by = c("team_id" = "id")) %>% mutate(still_playing = ifelse(is.na(still_playing), 0, still_playing),
-                                                                       still_playing = ifelse(team_id == 12, sum(still_playing), still_playing))
+still_playing = data.frame(id = dat$schedule$away$teamId, proj = dat$schedule$away$totalProjectedPointsLive, score = dat$schedule$away$totalPointsLive) %>%
+  rbind(data.frame(id = dat$schedule$home$teamId, proj = dat$schedule$home$totalProjectedPointsLive, score = dat$schedule$home$totalPointsLive)) %>%
+  filter(!is.na(score)) %>%
+  mutate(still_playing = ifelse(round2(proj, digits=2) == score, 0, 1),
+         still_playing = ifelse(id==12, sum(still_playing), still_playing)) %>%
+  select(id, still_playing)
 
 ui = navbarPage("WOFFL Portal", fluid = TRUE,
                 tabPanel("Weekly Scoreboard",
@@ -584,7 +576,14 @@ ui = navbarPage("WOFFL Portal", fluid = TRUE,
                                          h1(span("Playoff Picture", style = 'font-size: 60px; font-weight: bold; color:#FFFFFF; text-shadow: black 0.0em 0.18em 0.2em'))),
                                   column(3, img(src="3d.jpg", height = 150, width = 210)),
                                   style = 'margin-top:-20px; padding-top:10px; padding-bottom:10px; background-color:#580515'),
-                         fluidRow(column(4, gt_output('standings')))) #end of PP tabPanel
+                         fluidRow(tabsetPanel(type = "pills",
+                           tabPanel("Standings", column(12, align = "center", gt_output('standings'))),
+                           tabPanel("Seeding Races", 
+                                    column(4, gt_output('seed1'), gt_output('seed2')),
+                                    column(4, gt_output('seed3'), gt_output('seed4')),
+                                    column(4, gt_output('seed5'), gt_output('seed6'))),
+                                  ) #end of tabset Panel
+                           )) #end of PP tabPanel
                 ) #end of navbarPage
 
 
@@ -625,8 +624,8 @@ server = function(input, output, session) {
                                    by = c("opp_id" = "teamId")) %>%
                          mutate(opp_id = ifelse(is.na(opp_id), 12, opp_id),
                                 opp_score_live = ifelse(is.na(opp_score_live), ghost_score(), opp_score_live)) %>%
-                         left_join(still_playing, by = c("id" = "team_id")) %>%
-                         left_join(still_playing %>% rename(opp_still_playing=still_playing), by = c("opp_id" = "team_id")) %>%
+                         left_join(still_playing) %>%
+                         left_join(still_playing %>% rename(opp_still_playing=still_playing), by = c("opp_id" = "id")) %>%
                          mutate(cw_win = ifelse(totalPointsLive>opp_score_live & still_playing==0 & opp_still_playing==0, 1, 0),
                                 cw_gp = ifelse(still_playing==0 & opp_still_playing==0, 1, 0)) %>%
                          mutate(t_wins = cw_win + p_wins,
@@ -727,7 +726,7 @@ server = function(input, output, session) {
                                       left_join(team %>% mutate(id = as.double(id)) %>% 
                                                   select(id, logo, name, owner), 
                                                 by = c('team_id' = 'id')) %>%
-                                      left_join(still_playing, by = "team_id") %>%
+                                      left_join(still_playing, by = c("team_id"="id")) %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_wl(), by = c("team_id" = "id")) %>%
@@ -806,7 +805,7 @@ server = function(input, output, session) {
                                       left_join(team %>% mutate(id = as.double(id)) %>% 
                                                   select(id, logo, name, owner), 
                                                 by = c('team_id' = 'id')) %>%
-                                      left_join(still_playing, by="team_id") %>%
+                                      left_join(still_playing, by=c("team_id"="id")) %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_wl(), by = c("team_id" = "id")) %>%
@@ -885,7 +884,7 @@ server = function(input, output, session) {
                                       left_join(team %>% mutate(id = as.double(id)) %>% 
                                                   select(id, logo, name, owner), 
                                                 by = c('team_id' = 'id')) %>%
-                                      left_join(still_playing, by="team_id") %>%
+                                      left_join(still_playing, by=c("team_id"="id")) %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_wl(), by = c("team_id" = "id")) %>%
@@ -964,7 +963,7 @@ server = function(input, output, session) {
                                       left_join(team %>% mutate(id = as.double(id)) %>% 
                                                   select(id, logo, name, owner), 
                                                 by = c('team_id' = 'id')) %>%
-                                      left_join(still_playing, by="team_id") %>%
+                                      left_join(still_playing, by=c("team_id"="id")) %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_wl(), by = c("team_id" = "id")) %>%
@@ -1043,7 +1042,7 @@ server = function(input, output, session) {
                                       left_join(team %>% mutate(id = as.double(id)) %>% 
                                                   select(id, logo, name, owner), 
                                                 by = c('team_id' = 'id')) %>%
-                                      left_join(still_playing, by="team_id") %>%
+                                      left_join(still_playing, by=c("team_id"="id")) %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_wl(), by = c("team_id" = "id")) %>%
@@ -1122,7 +1121,7 @@ server = function(input, output, session) {
                                       left_join(team %>% mutate(id = as.double(id)) %>% 
                                                   select(id, logo, name, owner), 
                                                 by = c('team_id' = 'id')) %>%
-                                      left_join(still_playing, by="team_id") %>%
+                                      left_join(still_playing, by=c("team_id"="id")) %>%
                                       left_join(team_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_ov_record(), by = c("team_id" = "id")) %>%
                                       left_join(team_wl(), by = c("team_id" = "id")) %>%
@@ -1196,6 +1195,375 @@ server = function(input, output, session) {
                                  tab_header(title = html("<center><b>STANDINGS</b></center>")) %>%
                                  tab_options(heading.title.font.size = "18px",
                                              heading.background.color = "grey"))
+  
+  output$seed1 = render_gt(standings() %>%
+                             filter(t_wins >= standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
+                             arrange(desc(t_wins), desc(t_pf)) %>%
+                             left_join(AllGames %>% filter(season == CS,
+                                                           week <= 13,
+                                                           team %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                           opponent %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                         group_by(team) %>% 
+                                         summarise(tb_h2h_wins = sum(result, na.rm=T)),
+                                       by = c('owner'='team')) %>%
+                             mutate(tb_h2h_wins = ifelse(is.na(tb_h2h_wins), 0, tb_h2h_wins)) %>%
+                             left_join(AllGames %>% filter(season == CS,
+                                                           week <= 13,
+                                                           team %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                           opponent %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                         group_by(team) %>% 
+                                         summarise(tb_h2h_gp = sum(!is.na(score))),
+                                       by = c('owner'='team')) %>%
+                             mutate(tb_h2h_gp = ifelse(is.na(tb_h2h_gp), 0, as.numeric(tb_h2h_gp)),
+                                    tb_h2h_losses = tb_h2h_gp - tb_h2h_wins,
+                                    tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
+                                    tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
+                             mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
+                             arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                             filter(row_number() <= 4) %>%
+                             mutate(tb_h2h_record = ifelse(t_wins != standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric(), "", tb_h2h_record)) %>%
+                             select(logo, name, owner, record, tb_h2h_record, t_pf) %>%
+                             gt() %>%
+                             gt_img_circle(logo, height = 40) %>%
+                             gt_merge_stack(name, owner) %>%
+                             gt_theme_pff() %>%
+                             cols_label(logo = "",
+                                        name = "Team",
+                                        record = "Record",
+                                        t_pf = "PF",
+                                        tb_h2h_record = "TB Record") %>%
+                             cols_width(logo ~ px(50),
+                                        name ~ px(110),
+                                        record ~ px(65),
+                                        t_pf ~ px(70),
+                                        tb_h2h_record ~ px(65)) %>%
+                             cols_align(align = "center", columns = c(logo, record, t_pf, tb_h2h_record)) %>%
+                             fmt_number(columns = c(t_pf), decimals = 1) %>%
+                             tab_header(title = html("<center><b>1st Seed Race</b></center>")) %>%
+                             tab_options(heading.title.font.size = "18px",
+                                         heading.background.color = "grey") %>%
+                             tab_style(style = list(cell_fill(color = "gold")),
+                               locations = cells_body(rows = 1)))
+  
+  current_seed_1 = reactive(standings() %>%
+                              filter(t_wins >= standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
+                              arrange(desc(t_wins), desc(t_pf)) %>%
+                              left_join(AllGames %>% filter(season == CS,
+                                                            week <= 13,
+                                                            team %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                            opponent %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                          group_by(team) %>% 
+                                          summarise(tb_h2h_wins = sum(result, na.rm=T)),
+                                        by = c('owner'='team')) %>%
+                              mutate(tb_h2h_wins = ifelse(is.na(tb_h2h_wins), 0, tb_h2h_wins)) %>%
+                              left_join(AllGames %>% filter(season == CS,
+                                                            week <= 13,
+                                                            team %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                            opponent %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                          group_by(team) %>% 
+                                          summarise(tb_h2h_gp = sum(!is.na(score))),
+                                        by = c('owner'='team')) %>%
+                              mutate(tb_h2h_gp = ifelse(is.na(tb_h2h_gp), 0, as.numeric(tb_h2h_gp)),
+                                     tb_h2h_losses = tb_h2h_gp - tb_h2h_wins,
+                                     tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
+                                     tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
+                              mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
+                              arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                              filter(row_number() == 1) %>%
+                              pull(owner))
+  
+  output$seed2 = render_gt(standings() %>%
+                             filter(owner != current_seed_1()) %>%
+                             arrange(desc(t_pf)) %>%
+                             filter(row_number() <= 3) %>%
+                             select(logo, name, owner, t_pf) %>%
+                             gt() %>%
+                             gt_img_circle(logo, height = 40) %>%
+                             gt_merge_stack(name, owner) %>%
+                             gt_theme_pff() %>%
+                             cols_label(logo = "",
+                                        name = "Team",
+                                        t_pf = "PF") %>%
+                             cols_width(logo ~ px(50),
+                                        name ~ px(110),
+                                        t_pf ~ px(200)) %>%
+                             cols_align(align = "center", columns = c(logo, t_pf)) %>%
+                             fmt_number(columns = c(t_pf), decimals = 1) %>%
+                             tab_header(title = html("<center><b>2nd Seed Race</b></center>")) %>%
+                             tab_options(heading.title.font.size = "18px",
+                                         heading.background.color = "grey") %>%
+                             tab_style(style = list(cell_fill(color = "gold")),
+                                       locations = cells_body(rows = 1)))
+  
+  current_seed_2 = reactive(standings() %>%
+                              filter(owner != current_seed_1()) %>%
+                              arrange(desc(t_pf)) %>%
+                              filter(row_number() == 1) %>%
+                              pull(owner))
+  
+  output$seed3 = render_gt(standings() %>%
+                             filter(owner != current_seed_1(),
+                                    owner != current_seed_2()) %>%
+                             filter(t_wins >= standings() %>% filter(owner != current_seed_1(), owner != current_seed_2()) %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
+                             arrange(desc(t_wins), desc(t_pf)) %>%
+                             left_join(AllGames %>% filter(season == CS,
+                                                           week <= 13,
+                                                           team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                           opponent %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2())%>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                         group_by(team) %>% 
+                                         summarise(tb_h2h_wins = sum(result, na.rm=T)),
+                                       by = c('owner'='team')) %>%
+                             mutate(tb_h2h_wins = ifelse(is.na(tb_h2h_wins), 0, tb_h2h_wins)) %>%
+                             left_join(AllGames %>% filter(season == CS,
+                                                           week <= 13,
+                                                           team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                           opponent %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                         group_by(team) %>% 
+                                         summarise(tb_h2h_gp = sum(!is.na(score))),
+                                       by = c('owner'='team')) %>%
+                             mutate(tb_h2h_gp = ifelse(is.na(tb_h2h_gp), 0, as.numeric(tb_h2h_gp)),
+                                    tb_h2h_losses = tb_h2h_gp - tb_h2h_wins,
+                                    tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
+                                    tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
+                             mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
+                             arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                             filter(row_number() <= 4) %>%
+                             mutate(tb_h2h_record = ifelse(t_wins != standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric(), "", tb_h2h_record)) %>%
+                             select(logo, name, owner, record, tb_h2h_record, t_pf) %>%
+                             gt() %>%
+                             gt_img_circle(logo, height = 40) %>%
+                             gt_merge_stack(name, owner) %>%
+                             gt_theme_pff() %>%
+                             cols_label(logo = "",
+                                        name = "Team",
+                                        record = "Record",
+                                        t_pf = "PF",
+                                        tb_h2h_record = "TB Record") %>%
+                             cols_width(logo ~ px(50),
+                                        name ~ px(110),
+                                        record ~ px(65),
+                                        t_pf ~ px(70),
+                                        tb_h2h_record ~ px(65)) %>%
+                             cols_align(align = "center", columns = c(logo, record, t_pf, tb_h2h_record)) %>%
+                             fmt_number(columns = c(t_pf), decimals = 1) %>%
+                             tab_header(title = html("<center><b>3rd Seed Race</b></center>")) %>%
+                             tab_options(heading.title.font.size = "18px",
+                                         heading.background.color = "grey") %>%
+                             tab_style(style = list(cell_fill(color = "gold")),
+                                       locations = cells_body(rows = 1)))
+  
+  current_seed_3 = reactive(standings() %>%
+                              filter(owner != current_seed_1(),
+                                     owner != current_seed_2()) %>%
+                              filter(t_wins >= standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
+                              arrange(desc(t_wins), desc(t_pf)) %>%
+                              left_join(AllGames %>% filter(season == CS,
+                                                            week <= 13,
+                                                            team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                            opponent %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                          group_by(team) %>% 
+                                          summarise(tb_h2h_wins = sum(result, na.rm=T)),
+                                        by = c('owner'='team')) %>%
+                              mutate(tb_h2h_wins = ifelse(is.na(tb_h2h_wins), 0, tb_h2h_wins)) %>%
+                              left_join(AllGames %>% filter(season == CS,
+                                                            week <= 13,
+                                                            team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                            opponent %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2())%>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                          group_by(team) %>% 
+                                          summarise(tb_h2h_gp = sum(!is.na(score))),
+                                        by = c('owner'='team')) %>%
+                              mutate(tb_h2h_gp = ifelse(is.na(tb_h2h_gp), 0, as.numeric(tb_h2h_gp)),
+                                     tb_h2h_losses = tb_h2h_gp - tb_h2h_wins,
+                                     tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
+                                     tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
+                              mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
+                              arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                              filter(row_number() == 1) %>%
+                              pull(owner))
+  
+  output$seed4 = render_gt(standings() %>%
+                             filter(owner != current_seed_1(),
+                                    owner != current_seed_2(),
+                                    owner != current_seed_3()) %>%
+                             filter(t_wins >= standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
+                             arrange(desc(t_wins), desc(t_pf)) %>%
+                             left_join(AllGames %>% filter(season == CS,
+                                                           week <= 13,
+                                                           team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                           opponent %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                         group_by(team) %>% 
+                                         summarise(tb_h2h_wins = sum(result, na.rm=T)),
+                                       by = c('owner'='team')) %>%
+                             mutate(tb_h2h_wins = ifelse(is.na(tb_h2h_wins), 0, tb_h2h_wins)) %>%
+                             left_join(AllGames %>% filter(season == CS,
+                                                           week <= 13,
+                                                           team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                           opponent %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                         group_by(team) %>% 
+                                         summarise(tb_h2h_gp = sum(!is.na(score))),
+                                       by = c('owner'='team')) %>%
+                             mutate(tb_h2h_gp = ifelse(is.na(tb_h2h_gp), 0, as.numeric(tb_h2h_gp)),
+                                    tb_h2h_losses = tb_h2h_gp - tb_h2h_wins,
+                                    tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
+                                    tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
+                             mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
+                             arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                             filter(row_number() <= 4) %>%
+                             mutate(tb_h2h_record = ifelse(t_wins != standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric(), "", tb_h2h_record)) %>%
+                             select(logo, name, owner, record, tb_h2h_record, t_pf) %>%
+                             gt() %>%
+                             gt_img_circle(logo, height = 40) %>%
+                             gt_merge_stack(name, owner) %>%
+                             gt_theme_pff() %>%
+                             cols_label(logo = "",
+                                        name = "Team",
+                                        record = "Record",
+                                        t_pf = "PF",
+                                        tb_h2h_record = "TB Record") %>%
+                             cols_width(logo ~ px(50),
+                                        name ~ px(110),
+                                        record ~ px(65),
+                                        t_pf ~ px(70),
+                                        tb_h2h_record ~ px(65)) %>%
+                             cols_align(align = "center", columns = c(logo, record, t_pf, tb_h2h_record)) %>%
+                             fmt_number(columns = c(t_pf), decimals = 1) %>%
+                             tab_header(title = html("<center><b>4th Seed Race</b></center>")) %>%
+                             tab_options(heading.title.font.size = "18px",
+                                         heading.background.color = "grey") %>%
+                             tab_style(style = list(cell_fill(color = "gold")),
+                                       locations = cells_body(rows = 1)))
+  
+  current_seed_4 = reactive(standings() %>%
+                              filter(owner != current_seed_1(),
+                                     owner != current_seed_2(),
+                                     owner != current_seed_3()) %>%
+                              filter(t_wins >= standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
+                              arrange(desc(t_wins), desc(t_pf)) %>%
+                              left_join(AllGames %>% filter(season == CS,
+                                                            week <= 13,
+                                                            team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                            opponent %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                          group_by(team) %>% 
+                                          summarise(tb_h2h_wins = sum(result, na.rm=T)),
+                                        by = c('owner'='team')) %>%
+                              mutate(tb_h2h_wins = ifelse(is.na(tb_h2h_wins), 0, tb_h2h_wins)) %>%
+                              left_join(AllGames %>% filter(season == CS,
+                                                            week <= 13,
+                                                            team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
+                                                            opponent %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                          group_by(team) %>% 
+                                          summarise(tb_h2h_gp = sum(!is.na(score))),
+                                        by = c('owner'='team')) %>%
+                              mutate(tb_h2h_gp = ifelse(is.na(tb_h2h_gp), 0, as.numeric(tb_h2h_gp)),
+                                     tb_h2h_losses = tb_h2h_gp - tb_h2h_wins,
+                                     tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
+                                     tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
+                              mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
+                              arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                              filter(row_number() == 1) %>%
+                              pull(owner))
+  
+  output$seed5 = render_gt(if(CW>=7){standings() %>%
+                             left_join(AllGames %>% filter(season == CS,
+                                                           week <= 13,
+                                                           week >= 7) %>%
+                                         mutate(score = ifelse(is.na(score), 0, score),
+                                                result = ifelse(is.na(result), 0, result)) %>%
+                                         group_by(team) %>% 
+                                         summarise(hf_wins = sum(result, na.rm=T), hf_pf = sum(score, na.rm=T)),
+                                       by = c('owner'='team')) %>%
+                             filter(owner != current_seed_1(),
+                                    owner != current_seed_2(),
+                                    owner != current_seed_3(),
+                                    owner != current_seed_4()) %>%
+                             arrange(desc(hf_wins), desc(hf_pf)) %>%
+                             filter(row_number() <= 3) %>%
+                             select(logo, name, owner, hf_wins, hf_pf) %>%
+                             gt() %>%
+                             gt_img_circle(logo, height = 40) %>%
+                             gt_merge_stack(name, owner) %>%
+                             gt_theme_pff() %>%
+                             cols_label(logo = "",
+                                        name = "Team",
+                                        hf_wins = "L7W Wins",
+                                        hf_pf = "L7W PF") %>%
+                             cols_width(logo ~ px(50),
+                                        name ~ px(110),
+                                        hf_wins ~ px(65),
+                                        hf_pf ~ px(135)) %>%
+                             cols_align(align = "center", columns = c(logo, hf_pf, hf_wins)) %>%
+                             fmt_number(columns = c(hf_pf), decimals = 1) %>%
+                             tab_header(title = html("<center><b>Hot Finish Wildcard Race</b></center>")) %>%
+                             tab_options(heading.title.font.size = "18px",
+                                         heading.background.color = "grey") %>%
+                             tab_style(style = list(cell_fill(color = "gold")),
+                                       locations = cells_body(rows = 1))}
+                           else{data.frame(url = c("https://i.pinimg.com/originals/b7/21/34/b72134112b54864e4948865375ecbb11.gif")) %>%
+                               gt() %>%
+                               gt_img_rows(columns = url, height = 200) %>%
+                               cols_width(url ~ px(360)) %>%
+                               gt_theme_pff() %>%
+                               cols_label(url = "Starts in Week 7") %>%
+                               cols_align(align = "center", columns = c(url)) %>%
+                               tab_header(title = html("<center><b>Hot Finish Wildcard Race</b></center>")) %>%
+                               tab_options(heading.title.font.size = "18px",
+                                           heading.background.color = "grey")})
+  
+  current_seed_5 = reactive(if(CW>=7){
+    standings() %>%
+      left_join(AllGames %>% filter(season == CS,
+                                    week <= 13,
+                                    week >= 7) %>%
+                  mutate(score = ifelse(is.na(score), 0, score),
+                         result = ifelse(is.na(result), 0, result)) %>%
+                  group_by(team) %>% 
+                  summarise(hf_wins = sum(result, na.rm=T), hf_pf = sum(score, na.rm=T)),
+                by = c('owner'='team')) %>%
+      filter(owner != current_seed_1(),
+             owner != current_seed_2(),
+             owner != current_seed_3(),
+             owner != current_seed_4()) %>%
+      arrange(desc(hf_wins), desc(hf_pf)) %>%
+      filter(row_number() == 1) %>%
+      pull(owner)}
+      else{""})
+  
+  output$seed6 = render_gt(standings() %>%
+                             filter(owner != current_seed_1(),
+                                    owner != current_seed_2(),
+                                    owner != current_seed_3(),
+                                    owner != current_seed_4(),
+                                    owner != current_seed_5()) %>%
+                             arrange(desc(t_pf)) %>%
+                             filter(row_number() <= 3) %>%
+                             select(logo, name, owner, t_pf) %>%
+                             gt() %>%
+                             gt_img_circle(logo, height = 40) %>%
+                             gt_merge_stack(name, owner) %>%
+                             gt_theme_pff() %>%
+                             cols_label(logo = "",
+                                        name = "Team",
+                                        t_pf = "PF") %>%
+                             cols_width(logo ~ px(50),
+                                        name ~ px(110),
+                                        t_pf ~ px(200)) %>%
+                             cols_align(align = "center", columns = c(logo, t_pf)) %>%
+                             fmt_number(columns = c(t_pf), decimals = 1) %>%
+                             tab_header(title = html("<center><b>Points Wildcard Race</b></center>")) %>%
+                             tab_options(heading.title.font.size = "18px",
+                                         heading.background.color = "grey") %>%
+                             tab_style(style = list(cell_fill(color = "gold")),
+                                       locations = cells_body(rows = 1)))
+  
+  current_seed_6 = reactive(standings() %>%
+                              filter(owner != current_seed_1(),
+                                     owner != current_seed_2(),
+                                     owner != current_seed_3(),
+                                     owner != current_seed_4(),
+                                     owner != current_seed_5()) %>%
+                              arrange(desc(t_pf)) %>%
+                              filter(row_number() == 1) %>%
+                              pull(owner))
   
 }
 
