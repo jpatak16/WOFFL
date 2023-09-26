@@ -634,8 +634,9 @@ server = function(input, output, session) {
                                 t_pf = p_pf + totalPointsLive,
                                 t_pa = p_pa + opp_score_live) %>%
                          mutate(record = paste0(t_wins, '-', t_losses),
-                                ov_record = paste0(ov_wins, '-', ov_losses)) %>%
-                         select(logo, name, owner, record, ov_record, t_wins, t_losses, t_pf, t_pa, ov_wins, ov_losses))
+                                ov_record = paste0(ov_wins, '-', ov_losses),
+                                t_wp = t_wins/t_gp) %>%
+                         select(logo, name, owner, record, ov_record, t_wins, t_losses, t_wp, t_gp, t_pf, t_pa, ov_wins, ov_losses))
   
   team_record = reactive(AllGames %>% 
                            filter(season == CS, week < as.numeric(input$week)) %>%
@@ -1172,7 +1173,7 @@ server = function(input, output, session) {
                                   })
   
   output$standings = render_gt(standings() %>%
-                                 arrange(desc(t_wins), desc(t_pf)) %>%
+                                 arrange(desc(t_wp), desc(t_wins), t_losses, desc(t_pf)) %>%
                                  select(logo, name, owner, record, ov_record, t_pf, t_pa) %>%
                                  gt() %>%
                                  gt_img_circle(logo, height = 40) %>%
@@ -1197,20 +1198,19 @@ server = function(input, output, session) {
                                              heading.background.color = "grey"))
   
   output$seed1 = render_gt(standings() %>%
-                             filter(t_wins >= standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
-                             arrange(desc(t_wins), desc(t_pf)) %>%
+                             filter(t_wp >= standings() %>% arrange(desc(t_wp)) %>% filter(row_number() == 1) %>% select(t_wp) %>% as.numeric() - 1) %>%
                              left_join(AllGames %>% filter(season == CS,
                                                            week <= 13,
-                                                           team %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
-                                                           opponent %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                                           team %in% (standings() %>% arrange(desc(t_wp)) %>% filter(t_wp == standings() %>% arrange(desc(t_wp)) %>% filter(row_number() == 1) %>% select(t_wp) %>% as.numeric()) %>% pull(owner)),
+                                                           opponent %in% (standings() %>% arrange(desc(t_wp)) %>% filter(t_wp == standings() %>% arrange(desc(t_wp)) %>% filter(row_number() == 1) %>% select(t_wp) %>% as.numeric()) %>% pull(owner))) %>% 
                                          group_by(team) %>% 
                                          summarise(tb_h2h_wins = sum(result, na.rm=T)),
                                        by = c('owner'='team')) %>%
                              mutate(tb_h2h_wins = ifelse(is.na(tb_h2h_wins), 0, tb_h2h_wins)) %>%
                              left_join(AllGames %>% filter(season == CS,
                                                            week <= 13,
-                                                           team %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
-                                                           opponent %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner))) %>% 
+                                                           team %in% (standings() %>% arrange(desc(t_wp)) %>% filter(t_wp == standings() %>% arrange(desc(t_wp)) %>% filter(row_number() == 1) %>% select(t_wp) %>% as.numeric()) %>% pull(owner)),
+                                                           opponent %in% (standings() %>% arrange(desc(t_wp)) %>% filter(t_wp == standings() %>% arrange(desc(t_wp)) %>% filter(row_number() == 1) %>% select(t_wp) %>% as.numeric()) %>% pull(owner))) %>% 
                                          group_by(team) %>% 
                                          summarise(tb_h2h_gp = sum(!is.na(score))),
                                        by = c('owner'='team')) %>%
@@ -1219,7 +1219,7 @@ server = function(input, output, session) {
                                     tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
                                     tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
                              mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
-                             arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                             arrange(desc(t_wp), desc(t_wins), t_losses, desc(tb_h2h_wp), desc(t_pf)) %>%
                              filter(row_number() <= 4) %>%
                              mutate(tb_h2h_record = ifelse(t_wins != standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric(), "", tb_h2h_record)) %>%
                              select(logo, name, owner, record, tb_h2h_record, t_pf) %>%
@@ -1247,7 +1247,6 @@ server = function(input, output, session) {
   
   current_seed_1 = reactive(standings() %>%
                               filter(t_wins >= standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
-                              arrange(desc(t_wins), desc(t_pf)) %>%
                               left_join(AllGames %>% filter(season == CS,
                                                             week <= 13,
                                                             team %in% (standings() %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
@@ -1268,7 +1267,7 @@ server = function(input, output, session) {
                                      tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
                                      tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
                               mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
-                              arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                              arrange(desc(t_wp), desc(t_wins), t_losses, desc(tb_h2h_wp), desc(t_pf)) %>%
                               filter(row_number() == 1) %>%
                               pull(owner))
   
@@ -1305,7 +1304,6 @@ server = function(input, output, session) {
                              filter(owner != current_seed_1(),
                                     owner != current_seed_2()) %>%
                              filter(t_wins >= standings() %>% filter(owner != current_seed_1(), owner != current_seed_2()) %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
-                             arrange(desc(t_wins), desc(t_pf)) %>%
                              left_join(AllGames %>% filter(season == CS,
                                                            week <= 13,
                                                            team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
@@ -1326,7 +1324,7 @@ server = function(input, output, session) {
                                     tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
                                     tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
                              mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
-                             arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                             arrange(desc(t_wp), desc(t_wins), t_losses, desc(tb_h2h_wp), desc(t_pf)) %>%
                              filter(row_number() <= 4) %>%
                              mutate(tb_h2h_record = ifelse(t_wins != standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric(), "", tb_h2h_record)) %>%
                              select(logo, name, owner, record, tb_h2h_record, t_pf) %>%
@@ -1356,7 +1354,6 @@ server = function(input, output, session) {
                               filter(owner != current_seed_1(),
                                      owner != current_seed_2()) %>%
                               filter(t_wins >= standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
-                              arrange(desc(t_wins), desc(t_pf)) %>%
                               left_join(AllGames %>% filter(season == CS,
                                                             week <= 13,
                                                             team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
@@ -1377,7 +1374,7 @@ server = function(input, output, session) {
                                      tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
                                      tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
                               mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
-                              arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                              arrange(desc(t_wp), desc(t_wins), t_losses, desc(tb_h2h_wp), desc(t_pf)) %>%
                               filter(row_number() == 1) %>%
                               pull(owner))
   
@@ -1386,7 +1383,6 @@ server = function(input, output, session) {
                                     owner != current_seed_2(),
                                     owner != current_seed_3()) %>%
                              filter(t_wins >= standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
-                             arrange(desc(t_wins), desc(t_pf)) %>%
                              left_join(AllGames %>% filter(season == CS,
                                                            week <= 13,
                                                            team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
@@ -1407,7 +1403,7 @@ server = function(input, output, session) {
                                     tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
                                     tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
                              mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
-                             arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                             arrange(desc(t_wp), desc(t_wins), t_losses, desc(tb_h2h_wp), desc(t_pf)) %>%
                              filter(row_number() <= 4) %>%
                              mutate(tb_h2h_record = ifelse(t_wins != standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric(), "", tb_h2h_record)) %>%
                              select(logo, name, owner, record, tb_h2h_record, t_pf) %>%
@@ -1438,7 +1434,6 @@ server = function(input, output, session) {
                                      owner != current_seed_2(),
                                      owner != current_seed_3()) %>%
                               filter(t_wins >= standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric() - 1) %>%
-                              arrange(desc(t_wins), desc(t_pf)) %>%
                               left_join(AllGames %>% filter(season == CS,
                                                             week <= 13,
                                                             team %in% (standings() %>% filter(owner != current_seed_1(), owner != current_seed_2(), owner != current_seed_3()) %>% arrange(desc(t_wins)) %>% filter(t_wins == standings() %>% arrange(desc(t_wins)) %>% filter(row_number() == 1) %>% select(t_wins) %>% as.numeric()) %>% pull(owner)),
@@ -1459,7 +1454,7 @@ server = function(input, output, session) {
                                      tb_h2h_wp = tb_h2h_wins/tb_h2h_gp,
                                      tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)) %>%
                               mutate(tb_h2h_wp = ifelse(tb_h2h_gp==0, 1, tb_h2h_wp)) %>%
-                              arrange(desc(t_wins), desc(tb_h2h_wp), desc(t_pf)) %>%
+                              arrange(desc(t_wp), desc(t_wins), t_losses, desc(tb_h2h_wp), desc(t_pf)) %>%
                               filter(row_number() == 1) %>%
                               pull(owner))
   
