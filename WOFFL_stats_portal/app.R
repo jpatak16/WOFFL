@@ -1,10 +1,52 @@
 library(shiny)
 library(pacman)
-p_load(dplyr, readxl, magrittr, janitor, httr, jsonlite, gt, gtExtras, tidyr, ggplot2)
+p_load(dplyr, readxl, magrittr, janitor, httr, jsonlite, gt, gtExtras, tidyr, ggplot2, shinyWidgets, ggthemes, ggimage, rsvg)
 
 AllGames = read.csv("AllGames.csv") %>%
   clean_names() %>%
   mutate(result = ifelse(score > opponent_score, 1, 0))
+
+sim_results = read.csv("sim_results_2023.csv") %>% clean_names() %>%
+  arrange(desc(champion)) %>%
+  group_by(wk) %>%
+  mutate(rank = rank(-champion)) %>%
+  ungroup()
+  
+
+delta_sim_results = sim_results %>%
+  filter(wk == max(wk) | wk == max(wk) - 1) %>%
+  arrange(wk) %>%
+  group_by(team) %>%
+  summarise(delta_rank = diff(rank),
+            delta_wins = diff(wins),
+            delta_pf = diff(pf),
+            delta_playoffs = diff(playoffs),
+            delta_frb = diff(frb),
+            delta_champion = diff(champion)) %>%
+  mutate(delta_rank = delta_rank * -1,
+         delta_wins = round2(delta_wins, digits = 1),
+         delta_pf = round2(delta_pf, digits = 0),
+         delta_playoffs = round2(delta_playoffs*100, digits = 1),
+         delta_frb = round2(delta_frb*100, digits = 1),
+         delta_champion = round2(delta_champion*100, digits = 1),) %>%
+  mutate(delta_rank = case_when(delta_rank > 0 ~ paste0("+", delta_rank),
+                                delta_rank == 0 ~ "",
+                                .default = as.character(delta_rank)),
+         delta_wins = case_when(delta_wins > 0 ~ paste0("+", delta_wins),
+                                delta_wins == 0 ~ "",
+                                .default = as.character(delta_wins)),
+         delta_pf = case_when(delta_pf > 0 ~ paste0("+", delta_pf),
+                                delta_pf == 0 ~ "",
+                                .default = as.character(delta_pf)),
+         delta_playoffs = case_when(delta_playoffs > 0 ~ paste0("+", delta_playoffs, "%"),
+                                delta_playoffs == 0 ~ "",
+                                .default = paste0(delta_playoffs, "%")),
+         delta_frb = case_when(delta_frb > 0 ~ paste0("+", delta_frb, "%"),
+                                    delta_frb == 0 ~ "",
+                                    .default = paste0(delta_frb, "%")),
+         delta_champion = case_when(delta_champion > 0 ~ paste0("+", delta_champion, "%"),
+                                    delta_champion == 0 ~ "",
+                                    .default = paste0(delta_champion, "%")),)
 
 woffl_id = 313259
 
@@ -436,6 +478,39 @@ gt_merge_stack_with_plots<-function(gt_object, week, col1, col2, col3, col4, pal
                                  
                                  }) %>% 
     cols_hide(columns = c({{col2}}, {{col3}}, {{col4}}))}
+gt_merge_stack_delta <- function(gt_object, col1, col2, ..., small_cap = TRUE,
+                           font_size = c("14px", "10px"), font_weight = c("bold", "bold")) {
+  
+  
+  col1_bare <- rlang::enexpr(col1) %>% rlang::as_string()
+  
+  row_name_var <- gt_object[["_boxhead"]][["var"]][which(gt_object[["_boxhead"]][["type"]] == "stub")]
+  
+  # segment data with bare string column name
+  data_in <- gt_index(gt_object, column = {{ col2 }})
+  
+  gt_object %>%
+    text_transform(
+      locations = if (isTRUE(row_name_var == col1_bare)) {
+        cells_stub(rows = gt::everything())
+      } else {
+        cells_body(columns = {{ col1 }})
+      },
+      fn = function(x) {
+        if (small_cap) {
+          font_variant <- "small-caps"
+        } else {
+          font_variant <- "normal"
+        }
+        
+        glue::glue(
+          "<div style='line-height:{font_size[1]}'><span style='font-weight:{font_weight[1]};font-variant:{font_variant};color:{'black'};font-size:{font_size[1]}'>{x}</span></div>
+        <div style='line-height:{font_size[2]}'><span style ='font-weight:{font_weight[2]};color:{case_when(grepl('+', data_in, fixed=T) ~ '#66FF00', grepl('-', data_in, fixed=T) ~ 'red')};font-size:{font_size[2]}'>{data_in}</span></div>"
+        )
+      }
+    ) %>%
+    cols_hide(columns = {{ col2 }})
+}
 
 
 
@@ -583,7 +658,26 @@ ui = navbarPage("WOFFL Portal", fluid = TRUE,
                                     column(4, gt_output('seed3'), gt_output('seed4')),
                                     column(4, gt_output('seed5'), gt_output('seed6'))),
                                   ) #end of tabset Panel
-                           )) #end of PP tabPanel
+                           )), #end of PP tabPanel
+                tabPanel("Power Rankings",
+                         fluidRow(column(9, h1(span("White Oak Fantasy Football League Portal", style = 'color:#8A8A8A; text-shadow: black 0.0em 0.1em 0.2em')), 
+                                         h1(span("Power Rankings", style = 'font-size: 60px; font-weight: bold; color:#FFFFFF; text-shadow: black 0.0em 0.18em 0.2em'))),
+                                  column(3, img(src="3d.jpg", height = 150, width = 210)),
+                                  style = 'margin-top:-20px; padding-top:10px; padding-bottom:10px; background-color:#580515'),
+                         fluidRow(column(6, align = 'center', gt_output("powerRankings")),
+                                  column(6, align = 'center', 
+                                         dropdownButton(
+                                           selectInput("yaxis", "Y-Axis", 
+                                                       choices = c("Rank", "Projected Wins"="Projected_Wins", "Projected PF"="Projected_PF", "Playoff Berth Liklihood"="Playoff_Berth_Liklihood", "First Round Bye Liklihood"="First_Round_Bye_Liklihood", "Championship Liklihood"="Championship_Liklihood"), 
+                                                       selected = sample(c("Rank", "Projected Wins"="Projected_Wins", "Projected PF"="Projected_PF", "Playoff Berth Liklihood"="Playoff_Berth_Liklihood", "First Round Bye Liklihood"="First_Round_Bye_Liklihood", "Championship Liklihood"="Championship_Liklihood"), 1)), 
+                                           checkboxGroupInput("teams", "Selected Teams", choices = team$owner[1:11], inline = F, selected = sample(team$owner[1:11], 2)),
+                                           actionButton("selectall", label="Select/Deselect All"),
+                                           icon = icon("gear"), width = "220px",
+                                           tooltip = tooltipOptions(title = "Click to change inputs")),
+                                         h5("   "),
+                                         plotOutput("powerRankingPlot", height = "700px"),
+                                         style = 'padding-top:10px;'))
+                         ) #end of PR tabPanel
                 ) #end of navbarPage
 
 
@@ -626,8 +720,8 @@ server = function(input, output, session) {
                                 opp_score_live = ifelse(is.na(opp_score_live), ghost_score(), opp_score_live)) %>%
                          left_join(still_playing) %>%
                          left_join(still_playing %>% rename(opp_still_playing=still_playing), by = c("opp_id" = "id")) %>%
-                         mutate(cw_win = ifelse(totalPointsLive>opp_score_live & still_playing==0 & opp_still_playing==0, 1, 0),
-                                cw_gp = ifelse(still_playing==0 & opp_still_playing==0, 1, 0)) %>%
+                         mutate(cw_win = ifelse(totalPointsLive>opp_score_live & still_playing==0 & opp_still_playing==0 & CW>p_gp, 1, 0),
+                                cw_gp = ifelse(still_playing==0 & opp_still_playing==0 & CW>p_gp, 1, 0)) %>%
                          mutate(t_wins = cw_win + p_wins,
                                 t_gp = cw_gp + p_gp,
                                 t_losses = t_gp - t_wins,
@@ -636,7 +730,7 @@ server = function(input, output, session) {
                          mutate(record = paste0(t_wins, '-', t_losses),
                                 ov_record = paste0(ov_wins, '-', ov_losses),
                                 t_wp = t_wins/t_gp) %>%
-                         select(logo, name, owner, record, ov_record, t_wins, t_losses, t_wp, t_gp, t_pf, t_pa, ov_wins, ov_losses))
+                         select(logo, name, owner, record, ov_record, t_wins, t_losses, t_wp, t_gp, t_pf, t_pa, ov_wins, ov_losses, p_pf))
   
   team_record = reactive(AllGames %>% 
                            filter(season == CS, week < as.numeric(input$week)) %>%
@@ -747,7 +841,8 @@ server = function(input, output, session) {
                                       gt_merge_stack_with_plots(week = as.numeric(input$week), 
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
                                                                 font_size = c("25px", "15px"),
-                                                                font_weight = c("bold", "normal")) %>%
+                                                                font_weight = c("bold", "normal"),
+                                                                type = "shaded") %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -826,7 +921,8 @@ server = function(input, output, session) {
                                       gt_merge_stack_with_plots(week = as.numeric(input$week),
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
                                                                 font_size = c("25px", "15px"),
-                                                                font_weight = c("bold", "normal")) %>%
+                                                                font_weight = c("bold", "normal"),
+                                                                type = "shaded") %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -905,7 +1001,8 @@ server = function(input, output, session) {
                                       gt_merge_stack_with_plots(week = as.numeric(input$week),
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
                                                                 font_size = c("25px", "15px"),
-                                                                font_weight = c("bold", "normal")) %>%
+                                                                font_weight = c("bold", "normal"),
+                                                                type = "shaded") %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -984,7 +1081,8 @@ server = function(input, output, session) {
                                       gt_merge_stack_with_plots(week = as.numeric(input$week),
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
                                                                 font_size = c("25px", "15px"),
-                                                                font_weight = c("bold", "normal")) %>%
+                                                                font_weight = c("bold", "normal"),
+                                                                type = "shaded") %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -1063,7 +1161,8 @@ server = function(input, output, session) {
                                       gt_merge_stack_with_plots(week = as.numeric(input$week),
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
                                                                 font_size = c("25px", "15px"),
-                                                                font_weight = c("bold", "normal")) %>%
+                                                                font_weight = c("bold", "normal"),
+                                                                type = "shaded") %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -1138,11 +1237,12 @@ server = function(input, output, session) {
                                                         fill = "#ead89e", alpha = 0.8) %>%
                                       gt_merge_stack(col1 = score, col2 = projection,
                                                      font_size = c('25px', '15px'),
-                                                     font_weight = c('bold', 'normal')) %>%
+                                                     font_weight = c('bold', 'normal'),) %>%
                                       gt_merge_stack_with_plots(week = as.numeric(input$week),
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
                                                                 font_size = c("25px", "15px"),
-                                                                font_weight = c("bold", "normal")) %>%
+                                                                font_weight = c("bold", "normal"),
+                                                                type = "shaded") %>%
                                       gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
                                       cols_width(logo ~ px(100),
                                                  name ~ px(300),
@@ -1559,6 +1659,84 @@ server = function(input, output, session) {
                               arrange(desc(t_pf)) %>%
                               filter(row_number() == 1) %>%
                               pull(owner))
+  
+  output$powerRankings = render_gt(sim_results %>%
+                                     filter(wk == max(wk)) %>%
+                                     select(rank, owner=team, wins, pf, playoffs, frb, champion, wk) %>%
+                                     left_join(delta_sim_results, by = c('owner' = 'team')) %>%
+                                     left_join(team %>% select(logo, name, owner, id)) %>%
+                                     left_join(team_record(), by = 'id') %>%
+                                     left_join(team_ov_record(), by = 'id') %>%
+                                     left_join(standings() %>% select(owner, p_pf), by = 'owner') %>%
+                                     mutate(ppg = p_pf / wk) %>%
+                                     select(rank, delta_rank, logo, name, owner, record, ov_record, ppg, proj_wins = wins, delta_proj_wins = delta_wins, 
+                                            proj_pf = pf, delta_proj_pf = delta_pf, playoffs, delta_playoffs, frb, delta_frb, champion, delta_champion) %>%
+                                     gt() %>% cols_width(logo ~ px(60)) %>%
+                                     gt_img_circle(column = logo, height = 50) %>%
+                                     gt_merge_stack(col1 = name, col2 = owner) %>%
+                                     gt_merge_stack_delta(col1 = rank, col2 = delta_rank, font_size = c('20px', '10px')) %>%
+                                     gt_merge_stack_delta(col1 = proj_wins, col2 = delta_proj_wins, font_weight = c('normal', 'normal'), font_size = c('12px', '8px')) %>%
+                                     gt_merge_stack_delta(col1 = proj_pf, col2 = delta_proj_pf, font_weight = c('normal', 'normal'), font_size = c('12px', '8px')) %>%
+                                     gt_merge_stack_delta(col1 = playoffs, col2 = delta_playoffs, font_weight = c('normal', 'normal'), font_size = c('12px', '8px')) %>%
+                                     gt_merge_stack_delta(col1 = frb, col2 = delta_frb, font_weight = c('normal', 'normal'), font_size = c('12px', '8px')) %>%
+                                     gt_merge_stack_delta(col1 = champion, col2 = delta_champion, font_weight = c('normal', 'normal'), font_size = c('12px', '8px')) %>%
+                                     cols_align(align = 'center', columns = c(rank, record, ov_record, ppg, proj_wins, proj_pf, playoffs, frb, champion)) %>%
+                                     gt_theme_538() %>% 
+                                     cols_label(logo = "", 
+                                                name = "Team", 
+                                                ov_record = "Overall Record",
+                                                proj_wins = "Proj. Wins",
+                                                proj_pf = "Proj. PF",
+                                                playoffs = "Playoff Birth",
+                                                frb = "1st Round Bye") %>%
+                                     fmt_number(columns = c(ppg, proj_wins), decimals = 1) %>%
+                                     fmt_number(columns = c(proj_pf), decimals = 0) %>%
+                                     fmt_number(columns = c(playoffs, frb, champion), scale_by = 100, decimals = 1) %>%
+                                     tab_spanner(
+                                       label = "Simulation Liklihood",
+                                       columns = c(playoffs, frb, champion)))
+  
+output$powerRankingPlot = renderPlot(sim_results %>%
+                                       left_join(data.frame(team = sort(unique(sim_results$team)), 
+                                                            col = sort(c('#8b4513', '#008000', '#4682b4', '#4b0082', '#ff0000', '#00ff00', '#00ffff', '#0000ff', '#ffff54', '#ff69b4', '#ffe4c4')))) %>%
+                                       mutate(champion = champion*100,
+                                              frb = frb*100,
+                                              playoffs = playoffs *100) %>%
+                                       rename("Rank"=rank,
+                                              "Projected_Wins"=wins,
+                                              "Projected_PF"=pf,
+                                              "Playoff_Berth_Liklihood"=playoffs,
+                                              "First_Round_Bye_Liklihood"=frb,
+                                              "Championship_Liklihood"=champion) %>%
+                                       arrange(wk, team) %>%
+                                       filter(team %in% input$teams) %>%
+                                       ggplot(mapping=aes(x = wk, y = get(input$yaxis))) + 
+                                       geom_smooth(aes(color= I(col))) + 
+                                       geom_image(data = sim_results %>% left_join(team %>% select(logo, owner), by = c("team"="owner")) %>% filter(wk == max(wk), team %in% input$teams) %>% mutate(champion = champion*100, frb = frb*100, playoffs = playoffs *100) %>% rename("Rank"=rank, "Projected_Wins"=wins, "Projected_PF"=pf, "Playoff_Berth_Liklihood"=playoffs, "First_Round_Bye_Liklihood"=frb, "Championship_Liklihood"=champion),
+                                                  aes(image = logo), size = .05, by = "height") +
+                                       ylab(gsub("_", " ", input$yaxis)) + xlab("Week") +
+                                       xlim(0,13) +
+                                       theme_stata() +
+                                       theme(legend.position = "top",
+                                             axis.title.y = element_text(size = 24, margin = margin(r=30)),
+                                             axis.title.x = element_text(size = 20)) +
+                                       scale_color_identity(guide = "legend", name = "", labels = sort(input$teams)) +
+                                       if(input$yaxis == "Rank"){scale_y_reverse(lim = c(11,1), breaks = c(11,9,7,5,3,1))})
+
+observe({
+  if (input$selectall > 0) {
+    if (input$selectall %% 2 == 0){
+      updateCheckboxGroupInput(session=session, 
+                               inputId="teams",
+                               choices = team$owner[1:11], 
+                               selected = team$owner[1:11])
+      
+    } else {
+      updateCheckboxGroupInput(session=session, 
+                               inputId="teams",
+                               choices = team$owner[1:11], 
+                               selected = NULL)
+      }}})
   
 }
 
