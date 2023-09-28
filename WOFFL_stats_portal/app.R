@@ -677,7 +677,19 @@ ui = navbarPage("WOFFL Portal", fluid = TRUE,
                                          h5("   "),
                                          plotOutput("powerRankingPlot", height = "700px"),
                                          style = 'padding-top:10px;'))
-                         ) #end of PR tabPanel
+                         ), #end of PR tabPanel
+                tabPanel("Survivor Contest",
+                         fluidRow(column(9, h1(span("White Oak Fantasy Football League Portal", style = 'color:#8A8A8A; text-shadow: black 0.0em 0.1em 0.2em')), 
+                                         h1(span("Survivor Contest", style = 'font-size: 60px; font-weight: bold; color:#FFFFFF; text-shadow: black 0.0em 0.18em 0.2em'))),
+                                  column(3, img(src="3d.jpg", height = 150, width = 210)),
+                                  style = 'margin-top:-20px; padding-top:10px; padding-bottom:10px; background-color:#580515'),
+                         fluidRow(column(2, gt_output("sur_wk1")),
+                                  column(2, gt_output("sur_wk2")),
+                                  column(2, gt_output('sur_wk3')),
+                                  column(2, gt_output("sur_wk4"), gt_output('sur_wk5')),
+                                  column(2, gt_output("sur_wk6"), gt_output('sur_wk7')),
+                                  column(2, gt_output("sur_wk8"), gt_output('sur_wk9'), gt_output('sur_wk10')))
+                         ) #end of SC tabPanel
                 ) #end of navbarPage
 
 
@@ -1737,7 +1749,482 @@ observe({
                                choices = team$owner[1:11], 
                                selected = NULL)
       }}})
-  
+
+output$sur_wk1 = render_gt(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 0){
+    schedule %>%
+      filter(matchupPeriodId == 1, teamId != 12) %>%
+      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
+      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = owner) %>%
+      gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_theme_pff() %>%
+      cols_label(totalPointsLive = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 1</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 11))} 
+  else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 0){
+    AllGames %>%
+      filter(season == CS, week == 1, team != "Ghost of Dakota Frantum") %>%
+      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
+      select(name, team, score) %>%
+      arrange(desc(score)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_theme_pff() %>%
+      cols_label(score = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 1</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 11))
+  } 
+  else{})
+
+loser_sur_1 = reactive(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 0){
+    AllGames %>%
+      filter(season == CS, week == 1, team != "Ghost of Dakota Frantum") %>%
+      arrange(desc(score)) %>%
+      filter(row_number() == 11) %>%
+      pull(team)}
+  else{""})
+
+output$sur_wk2 = render_gt(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 1){
+    schedule %>%
+      filter(matchupPeriodId == 2, teamId != 12) %>%
+      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
+      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      filter(owner != loser_sur_1()) %>%
+      arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = owner) %>%
+      gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_theme_pff() %>%
+      cols_label(totalPointsLive = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 2</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 10))} 
+  else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 1){
+    AllGames %>%
+      filter(season == CS, week == 2, team != "Ghost of Dakota Frantum") %>%
+      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
+      select(name, team, score) %>%
+      filter(team != loser_sur_1()) %>%
+      arrange(desc(score)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_theme_pff() %>%
+      cols_label(score = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 2</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 10))
+  } 
+  else{})
+
+loser_sur_2 = reactive(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 1){
+    AllGames %>%
+      filter(season == CS, week == 2, team != "Ghost of Dakota Frantum") %>%
+      filter(team != loser_sur_1()) %>%
+      arrange(desc(score)) %>%
+      filter(row_number() == 10) %>%
+      pull(team)}
+  else{""})
+
+output$sur_wk3 = render_gt(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 2){
+    schedule %>%
+      filter(matchupPeriodId == 3, teamId != 12) %>%
+      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
+      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      filter(owner != loser_sur_1() & owner != loser_sur_2()) %>%
+      arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = owner) %>%
+      gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_theme_pff() %>%
+      cols_label(totalPointsLive = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 3</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 9))} 
+  else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 2){
+    AllGames %>%
+      filter(season == CS, week == 3, team != "Ghost of Dakota Frantum") %>%
+      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
+      select(name, team, score) %>%
+      filter(team != loser_sur_1() & team != loser_sur_2()) %>%
+      arrange(desc(score)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_theme_pff() %>%
+      cols_label(score = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 3</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 9))
+  } 
+  else{})
+
+loser_sur_3 = reactive(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 2){
+    AllGames %>%
+      filter(season == CS, week == 3, team != "Ghost of Dakota Frantum") %>%
+      filter(team != loser_sur_1() & team != loser_sur_2()) %>%
+      arrange(desc(score)) %>%
+      filter(row_number() == 9) %>%
+      pull(team)}
+  else{""})
+
+output$sur_wk4 = render_gt(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 3){
+    schedule %>%
+      filter(matchupPeriodId == 4, teamId != 12) %>%
+      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
+      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3()) %>%
+      arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = owner) %>%
+      gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_theme_pff() %>%
+      cols_label(totalPointsLive = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 4</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 8))} 
+  else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 3){
+    AllGames %>%
+      filter(season == CS, week == 4, team != "Ghost of Dakota Frantum") %>%
+      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
+      select(name, team, score) %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3()) %>%
+      arrange(desc(score)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_theme_pff() %>%
+      cols_label(score = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 4</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 8))
+  } 
+  else{})
+
+loser_sur_4 = reactive(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 3){
+    AllGames %>%
+      filter(season == CS, week == 4, team != "Ghost of Dakota Frantum") %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3()) %>%
+      arrange(desc(score)) %>%
+      filter(row_number() == 8) %>%
+      pull(team)}
+  else{""})
+
+output$sur_wk5 = render_gt(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 4){
+    schedule %>%
+      filter(matchupPeriodId == 5, teamId != 12) %>%
+      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
+      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4()) %>%
+      arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = owner) %>%
+      gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_theme_pff() %>%
+      cols_label(totalPointsLive = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 5</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 7))} 
+  else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 4){
+    AllGames %>%
+      filter(season == CS, week == 5, team != "Ghost of Dakota Frantum") %>%
+      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
+      select(name, team, score) %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4()) %>%
+      arrange(desc(score)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_theme_pff() %>%
+      cols_label(score = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 5</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 7))
+  } 
+  else{})
+
+loser_sur_5 = reactive(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 4){
+    AllGames %>%
+      filter(season == CS, week == 5, team != "Ghost of Dakota Frantum") %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4()) %>%
+      arrange(desc(score)) %>%
+      filter(row_number() == 7) %>%
+      pull(team)}
+  else{""})
+
+output$sur_wk6 = render_gt(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 5){
+    schedule %>%
+      filter(matchupPeriodId == 6, teamId != 12) %>%
+      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
+      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4() &
+               owner != loser_sur_5()) %>%
+      arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = owner) %>%
+      gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_theme_pff() %>%
+      cols_label(totalPointsLive = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 6</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 6))} 
+  else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 5){
+    AllGames %>%
+      filter(season == CS, week == 6, team != "Ghost of Dakota Frantum") %>%
+      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
+      select(name, team, score) %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
+               team != loser_sur_5()) %>%
+      arrange(desc(score)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_theme_pff() %>%
+      cols_label(score = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 6</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 6))
+  } 
+  else{})
+
+loser_sur_6 = reactive(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 5){
+    AllGames %>%
+      filter(season == CS, week == 6, team != "Ghost of Dakota Frantum") %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
+               team != loser_sur_5()) %>%
+      arrange(desc(score)) %>%
+      filter(row_number() == 6) %>%
+      pull(team)}
+  else{""})
+
+output$sur_wk7 = render_gt(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 6){
+    schedule %>%
+      filter(matchupPeriodId == 7, teamId != 12) %>%
+      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
+      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4() &
+               owner != loser_sur_5() & owner != loser_sur_6()) %>%
+      arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = owner) %>%
+      gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_theme_pff() %>%
+      cols_label(totalPointsLive = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 7</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 5))} 
+  else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 6){
+    AllGames %>%
+      filter(season == CS, week == 7, team != "Ghost of Dakota Frantum") %>%
+      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
+      select(name, team, score) %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
+               team != loser_sur_5() & team != loser_sur_6()) %>%
+      arrange(desc(score)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_theme_pff() %>%
+      cols_label(score = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 7</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 5))
+  } 
+  else{})
+
+loser_sur_7 = reactive(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 6){
+    AllGames %>%
+      filter(season == CS, week == 7, team != "Ghost of Dakota Frantum") %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
+               team != loser_sur_5() & team != loser_sur_6()) %>%
+      arrange(desc(score)) %>%
+      filter(row_number() == 5) %>%
+      pull(team)}
+  else{""})
+
+output$sur_wk8 = render_gt(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 7){
+    schedule %>%
+      filter(matchupPeriodId == 8, teamId != 12) %>%
+      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
+      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4() &
+               owner != loser_sur_5() & owner != loser_sur_6() & owner != loser_sur_7()) %>%
+      arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = owner) %>%
+      gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_theme_pff() %>%
+      cols_label(totalPointsLive = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 8</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 4))} 
+  else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 7){
+    AllGames %>%
+      filter(season == CS, week == 8, team != "Ghost of Dakota Frantum") %>%
+      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
+      select(name, team, score) %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
+               team != loser_sur_5() & team != loser_sur_6() & team != loser_sur_7()) %>%
+      arrange(desc(score)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_theme_pff() %>%
+      cols_label(score = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 8</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 4))
+  } 
+  else{})
+
+loser_sur_8 = reactive(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 7){
+    AllGames %>%
+      filter(season == CS, week == 8, team != "Ghost of Dakota Frantum") %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
+               team != loser_sur_5() & team != loser_sur_6() & team != loser_sur_7()) %>%
+      arrange(desc(score)) %>%
+      filter(row_number() == 4) %>%
+      pull(team)}
+  else{""})
+
+output$sur_wk9 = render_gt(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 8){
+    schedule %>%
+      filter(matchupPeriodId == 9, teamId != 12) %>%
+      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
+      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4() &
+               owner != loser_sur_5() & owner != loser_sur_6() & owner != loser_sur_7() & owner != loser_sur_8()) %>%
+      arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = owner) %>%
+      gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_theme_pff() %>%
+      cols_label(totalPointsLive = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 9</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 3))} 
+  else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 8){
+    AllGames %>%
+      filter(season == CS, week == 9, team != "Ghost of Dakota Frantum") %>%
+      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
+      select(name, team, score) %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
+               team != loser_sur_5() & team != loser_sur_6() & team != loser_sur_7() & team != loser_sur_8()) %>%
+      arrange(desc(score)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_theme_pff() %>%
+      cols_label(score = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 9</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 3))
+  } 
+  else{})
+
+loser_sur_9 = reactive(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 8){
+    AllGames %>%
+      filter(season == CS, week == 9, team != "Ghost of Dakota Frantum") %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
+               team != loser_sur_5() & team != loser_sur_6() & team != loser_sur_7() & team != loser_sur_8()) %>%
+      arrange(desc(score)) %>%
+      filter(row_number() == 3) %>%
+      pull(team)}
+  else{""})
+
+output$sur_wk10 = render_gt(
+  if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 9){
+    schedule %>%
+      filter(matchupPeriodId ==10, teamId != 12) %>%
+      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
+      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4() &
+               owner != loser_sur_5() & owner != loser_sur_6() & owner != loser_sur_7() & owner != loser_sur_8() & owner != loser_sur_9()) %>%
+      arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = owner) %>%
+      gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_theme_pff() %>%
+      cols_label(totalPointsLive = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 10</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 2)) %>%
+      tab_style(style = list(cell_fill(color = "gold")),
+                locations = cells_body(rows = 1))} 
+  else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 9){
+    AllGames %>%
+      filter(season == CS, week == 10, team != "Ghost of Dakota Frantum") %>%
+      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
+      select(name, team, score) %>%
+      filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
+               team != loser_sur_5() & team != loser_sur_6() & team != loser_sur_7() & team != loser_sur_8() & team != loser_sur_9()) %>%
+      arrange(desc(score)) %>%
+      gt() %>%
+      gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_theme_pff() %>%
+      cols_label(score = 'PF') %>%
+      tab_header(title = html("<center><b>Wk 10</b></center>")) %>%
+      tab_options(heading.title.font.size = "14px",
+                  heading.background.color = "grey") %>%
+      tab_style(style = list(cell_fill(color = "red")),
+                locations = cells_body(rows = 2)) %>%
+      tab_style(style = list(cell_fill(color = "gold")),
+                locations = cells_body(rows = 1))
+  } 
+  else{})
+
 }
 
 shinyApp(ui, server)
