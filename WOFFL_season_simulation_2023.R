@@ -161,9 +161,10 @@ simulate_season = function(n){
       left_join(sim_season %>% filter(team %in% teams_tie_1,
                                       opponent %in% teams_tie_1) %>% 
                   group_by(team) %>% 
-                  summarise(tb_h2h_wins = sum(result)),
+                  summarise(tb_h2h_wins = sum(result), tb_h2h_gp = n()),
                 by = 'team') %>%
-      arrange(desc(wins), desc(tb_h2h_wins), desc(PF)) %>%
+      mutate(tb_h2h_wp = ifelse(is.na(tb_h2h_gp), 1, tb_h2h_wins / tb_h2h_gp)) %>%
+      arrange(desc(wins), desc(tb_h2h_wp), desc(PF)) %>%
       mutate(rs_champs = ifelse(row_number() == 1, 1, 0))
     
     #decide tiebreaker for rs ru
@@ -188,9 +189,10 @@ simulate_season = function(n){
       left_join(sim_season %>% filter(team %in% teams_tie_3,
                                       opponent %in% teams_tie_3) %>% 
                   group_by(team) %>% 
-                  summarise(tb_h2h_wins_3 = sum(result)),
+                  summarise(tb_h2h_wins_3 = sum(result), tb_h2h_gp_3 = n()),
                 by = 'team') %>%
-      arrange(desc(wins), desc(tb_h2h_wins_3), desc(PF)) %>%
+      mutate(tb_h2h_wp_3 = ifelse(is.na(tb_h2h_gp_3), 1, tb_h2h_wins_3 / tb_h2h_gp_3)) %>%
+      arrange(desc(wins), desc(tb_h2h_wp_3), desc(PF)) %>%
       filter(frb != 1) %>%
       mutate(po_sd3 = ifelse(row_number() == 1, 1, 0))
     
@@ -208,9 +210,10 @@ simulate_season = function(n){
       left_join(sim_season %>% filter(team %in% teams_tie_4,
                                       opponent %in% teams_tie_4) %>% 
                   group_by(team) %>% 
-                  summarise(tb_h2h_wins_4 = sum(result)),
+                  summarise(tb_h2h_wins_4 = sum(result), tb_h2h_gp_4 = n()),
                 by = 'team') %>%
-      arrange(desc(wins), desc(tb_h2h_wins_4), desc(PF)) %>%
+      mutate(tb_h2h_wp_4 = ifelse(is.na(tb_h2h_gp_4), 1, tb_h2h_wins_4 / tb_h2h_gp_4)) %>%
+      arrange(desc(wins), desc(tb_h2h_wp_4), desc(PF)) %>%
       filter(frb != 1, po_sd3 != 1) %>%
       mutate(po_sd4 = ifelse(row_number() == 1, 1, 0))
     
