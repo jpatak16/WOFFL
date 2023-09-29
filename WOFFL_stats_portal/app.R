@@ -1,12 +1,31 @@
 library(shiny)
 library(pacman)
-p_load(dplyr, readxl, magrittr, janitor, httr, jsonlite, gt, gtExtras, tidyr, ggplot2, shinyWidgets, ggthemes, ggimage, rsvg)
+library(dplyr)
+library(readxl)
+library(magrittr)
+library(janitor)
+library(httr)
+library(jsonlite)
+library(gt)
+library(gtExtras)
+library(tidyr)
+library(ggplot2)
+library(shinyWidgets)
+library(ggthemes)
+library(ggimage)
+library(rsvg)
+library(bslib)
+library(shinyMobile)
+library(svglite)
+library(shiny.pwa)
 
-AllGames = read.csv("AllGames.csv") %>%
+#p_load(dplyr, readxl, magrittr, janitor, httr, jsonlite, gt, gtExtras, tidyr, ggplot2, shinyWidgets, ggthemes, ggimage, rsvg, bslib, shinyMobile, shiny.pwa)
+
+AllGames = read.csv("https://raw.githubusercontent.com/jpatak16/WOFFL/main/WOFFL_stats_portal/AllGames.csv") %>%
   clean_names() %>%
   mutate(result = ifelse(score > opponent_score, 1, 0))
 
-sim_results = read.csv("sim_results_2023.csv") %>% clean_names() %>%
+sim_results = read.csv("https://raw.githubusercontent.com/jpatak16/WOFFL/main/WOFFL_stats_portal/sim_results_2023.csv") %>% clean_names() %>%
   arrange(desc(champion)) %>%
   group_by(wk) %>%
   mutate(rank = rank(-champion)) %>%
@@ -24,11 +43,11 @@ delta_sim_results = sim_results %>%
             delta_frb = diff(frb),
             delta_champion = diff(champion)) %>%
   mutate(delta_rank = delta_rank * -1,
-         delta_wins = round2(delta_wins, digits = 1),
-         delta_pf = round2(delta_pf, digits = 0),
-         delta_playoffs = round2(delta_playoffs*100, digits = 1),
-         delta_frb = round2(delta_frb*100, digits = 1),
-         delta_champion = round2(delta_champion*100, digits = 1),) %>%
+         delta_wins = round(delta_wins, digits = 1),
+         delta_pf = round(delta_pf, digits = 0),
+         delta_playoffs = round(delta_playoffs*100, digits = 1),
+         delta_frb = round(delta_frb*100, digits = 1),
+         delta_champion = round(delta_champion*100, digits = 1),) %>%
   mutate(delta_rank = case_when(delta_rank > 0 ~ paste0("+", delta_rank),
                                 delta_rank == 0 ~ "",
                                 .default = as.character(delta_rank)),
@@ -97,7 +116,7 @@ pos_ids <- tibble::tribble(
   "Injured Reserve",             "IR",      21,    NA
 )
 
-round2 = function(x, digits) {
+round_real <- function(x, digits) {
   posneg = sign(x)
   z = abs(x)*10^digits
   z = z + 0.5 + sqrt(.Machine$double.eps)
@@ -105,7 +124,7 @@ round2 = function(x, digits) {
   z = z/10^digits
   z*posneg
 }
-gt_merge_img_circle<-function(gt_object, col1, col2, col3, palette = c("black", "grey"), 
+gt_merge_img_circle <- function(gt_object, col1, col2, col3, palette = c("black", "grey"), 
                               ..., small_cap = TRUE, font_size = c("14px", "10px"), font_weight = c("bold", "bold"), 
                               height = 25, border_color = "black", border_weight = 1.5) {
   
@@ -124,13 +143,13 @@ gt_merge_img_circle<-function(gt_object, col1, col2, col3, palette = c("black", 
                                  } else {font_variant <- "normal"}
     
                                  glue::glue("<div style='line-height:{font_size[1]}'><div style='background-image: url({x});background-size:cover;background-position:center;background-color:white;border: {border_weight}px solid {border_color};border-radius: 50%;height:{height}px;width:100%;'></div></div>\n        
-                                            <div style='line-height:{font_size[2]}'><span style ='float:left;font-weight:{font_weight[2]};color:{colors[2]};font-size:{font_size[2]}'>{data_in2}</span>
-                                            <span style ='float:right;font-weight:{font_weight[2]};color:{colors[2]};font-size:{font_size[2]}'>{data_in3}</span></div>")}) %>% 
+                                            <div style='text-align:center;line-height:{font_size[2]}'><span style ='font-weight:{font_weight[2]};color:{colors[2]};font-size:{font_size[2]}'>{data_in2}</div>
+                                            <div style='text-align:center;line-height:{font_size[2]}'><span style ='font-weight:{font_weight[2]};color:{colors[2]};font-size:{font_size[2]}'>{data_in3}</div>")}) %>% 
     cols_hide(columns = c({{col2}}, {{col3}}))}
 
-gt_merge_stack_with_plots<-function(gt_object, week, col1, col2, col3, col4, palette = c("black", "grey"), 
+gt_merge_stack_with_plots <- function(gt_object, week, col1, col2, col3, col4, palette = c("black", "grey"), 
                               ..., small_cap = TRUE, font_size = c("14px", "10px"), font_weight = c("bold", "bold"), 
-                              max_wins=16, width=max_wins/.65, color1="#013369", color2="#D50A0A", color3="gray",
+                              max_wins=16, width=max_wins/.85, color1="#013369", color2="#D50A0A", color3="gray",
                               height_plot = 7, palette2=c("black", "black", "purple", "green", "lightgrey"),
                               fig_dim=c(height_plot, width), same_limit = TRUE, type = "default", label = TRUE) {
   
@@ -630,76 +649,76 @@ still_playing = data.frame(id = dat$schedule$away$teamId, proj = dat$schedule$aw
          still_playing = ifelse(id==12, sum(still_playing), still_playing)) %>%
   select(id, still_playing)
 
-ui = navbarPage("WOFFL Portal", fluid = TRUE,
-                tabPanel("Weekly Scoreboard",
-                         fluidRow(column(9, h1(span("White Oak Fantasy Football League Portal", style = 'color:#8A8A8A; text-shadow: black 0.0em 0.1em 0.2em')), 
-                                         h1(span("Weekly Scoreboard", style = 'font-size: 60px; font-weight: bold; color:#FFFFFF; text-shadow: black 0.0em 0.18em 0.2em'))),
-                                  column(3, img(src="3d.jpg", height = 150, width = 210)),
-                                  style = 'margin-top:-20px; padding-top:10px; padding-bottom:10px; background-color:#580515'),
-                         fluidRow(column(12, align='center', selectInput("week", "Week Selector", week_selector_options, selected = CW)), 
+ui = f7Page(div(h1(span("White Oak Fantasy Football League", style = 'color:#8A8A8A; text-shadow: black 0.0em 0.1em 0.2em')), 
+                h2(span(img(src="3d.jpg", height = 75, width = 105), style = "float:right;margin-top:-50px;margin-right:30px;"),
+                   span("Stats Portal", style = 'clear:right; font-weight: bold; color:#FFFFFF; text-shadow: black 0.0em 0.18em 0.2em')
+                   ),
+                style = 'margin-top:-20px; padding-top:10px; padding-bottom:10px; background-color:#580515'),
+            allowPWA = TRUE, 
+            f7Tabs(id = "tabs", style = "toolbar",
+                   f7Tab(tabName = "Scoreboard",
+                         active = TRUE,
+                         icon = f7Icon("square_fill_line_vertical_square"),
+                         h1(div("Scoreboard", style = "color:#580515;font-weight:bolder;font-size:40px;text-align:center;")),
+                         fluidRow(column(12, align='center', f7Select("week", "Week Selector", week_selector_options, selected = CW, width = "60%")), 
                                   style = 'padding-top:10px;'),
                          fluidRow(column(12, align='center', uiOutput("playoffs"))),
-                         fluidRow(column(6, gt_output('wk_matchup_1')),
-                                  column(6, gt_output('wk_matchup_2'))),
-                         fluidRow(column(6, gt_output('wk_matchup_3')),
-                                  column(6, gt_output('wk_matchup_4'))),
-                         fluidRow(column(6, gt_output('wk_matchup_5')),
-                                  column(6, gt_output('wk_matchup_6')))
-                         ), #end of WS tabPanel
-                tabPanel("Playoff Picture",
-                         fluidRow(column(9, h1(span("White Oak Fantasy Football League Portal", style = 'color:#8A8A8A; text-shadow: black 0.0em 0.1em 0.2em')), 
-                                         h1(span("Playoff Picture", style = 'font-size: 60px; font-weight: bold; color:#FFFFFF; text-shadow: black 0.0em 0.18em 0.2em'))),
-                                  column(3, img(src="3d.jpg", height = 150, width = 210)),
-                                  style = 'margin-top:-20px; padding-top:10px; padding-bottom:10px; background-color:#580515'),
-                         fluidRow(tabsetPanel(type = "pills",
-                           tabPanel("Standings", column(12, align = "center", gt_output('standings'))),
-                           tabPanel("Seeding Races", 
-                                    column(4, gt_output('seed1'), gt_output('seed2')),
-                                    column(4, gt_output('seed3'), gt_output('seed4')),
-                                    column(4, gt_output('seed5'), gt_output('seed6'))),
-                                  ) #end of tabset Panel
-                           )), #end of PP tabPanel
-                tabPanel("Power Rankings",
-                         fluidRow(column(9, h1(span("White Oak Fantasy Football League Portal", style = 'color:#8A8A8A; text-shadow: black 0.0em 0.1em 0.2em')), 
-                                         h1(span("Power Rankings", style = 'font-size: 60px; font-weight: bold; color:#FFFFFF; text-shadow: black 0.0em 0.18em 0.2em'))),
-                                  column(3, img(src="3d.jpg", height = 150, width = 210)),
-                                  style = 'margin-top:-20px; padding-top:10px; padding-bottom:10px; background-color:#580515'),
-                         fluidRow(column(6, align = 'center', gt_output("powerRankings")),
-                                  column(6, align = 'center', 
-                                         dropdownButton(
-                                           selectInput("yaxis", "Y-Axis", 
-                                                       choices = c("Rank", "Projected Wins"="Projected_Wins", "Projected PF"="Projected_PF", "Playoff Berth Liklihood"="Playoff_Berth_Liklihood", "First Round Bye Liklihood"="First_Round_Bye_Liklihood", "Championship Liklihood"="Championship_Liklihood"), 
-                                                       selected = sample(c("Rank", "Projected Wins"="Projected_Wins", "Projected PF"="Projected_PF", "Playoff Berth Liklihood"="Playoff_Berth_Liklihood", "First Round Bye Liklihood"="First_Round_Bye_Liklihood", "Championship Liklihood"="Championship_Liklihood"), 1)), 
-                                           checkboxGroupInput("teams", "Selected Teams", choices = team$owner[1:11], inline = F, selected = sample(team$owner[1:11], 2)),
-                                           actionButton("selectall", label="Select/Deselect All"),
-                                           icon = icon("gear"), width = "220px",
-                                           tooltip = tooltipOptions(title = "Click to change inputs")),
-                                         h5("   "),
-                                         plotOutput("powerRankingPlot", height = "700px"),
-                                         style = 'padding-top:10px;'))
-                         ), #end of PR tabPanel
-                tabPanel("Survivor Contest",
-                         fluidRow(column(9, h1(span("White Oak Fantasy Football League Portal", style = 'color:#8A8A8A; text-shadow: black 0.0em 0.1em 0.2em')), 
-                                         h1(span("Survivor Contest", style = 'font-size: 60px; font-weight: bold; color:#FFFFFF; text-shadow: black 0.0em 0.18em 0.2em'))),
-                                  column(3, img(src="3d.jpg", height = 150, width = 210)),
-                                  style = 'margin-top:-20px; padding-top:10px; padding-bottom:10px; background-color:#580515'),
-                         fluidRow(column(2, gt_output("sur_wk1")),
-                                  column(2, gt_output("sur_wk2")),
-                                  column(2, gt_output('sur_wk3')),
-                                  column(2, gt_output("sur_wk4"), gt_output('sur_wk5')),
-                                  column(2, gt_output("sur_wk6"), gt_output('sur_wk7')),
-                                  column(2, gt_output("sur_wk8"), gt_output('sur_wk9'), gt_output('sur_wk10')))
-                         ) #end of SC tabPanel
-                ) #end of navbarPage
-
+                         pwa("https://jpatak.shinyapps.io/WOFFL/", output = "www", title = "WOFFL", icon = "www/iconlogo.png"),
+                         gt_output('wk_matchup_1'),
+                         gt_output('wk_matchup_2'),
+                         gt_output('wk_matchup_3'),
+                         gt_output('wk_matchup_4'),
+                         gt_output('wk_matchup_5'),
+                         fluidRow(gt_output('wk_matchup_6'), style = 'padding-bottom:200px')),
+                   f7Tab(tabName = "Standings",
+                         icon = icon("list-ol"),
+                         h1(div("Standings", style = "color:#580515;font-weight:bolder;font-size:40px;text-align:center;")),
+                         fluidRow(gt_output('standings'), style = 'padding-bottom:200px')),
+                   f7Tab(tabName = "CurrentSeeding",
+                         icon = html("<i class='fa-solid fa-code-fork fa-rotate-270'></i>"),
+                         h1(div("Current Seeding", style = "color:#580515;font-weight:bolder;font-size:40px;text-align:center;")),
+                         gt_output("seed1"),
+                         gt_output("seed2"),
+                         gt_output("seed3"),
+                         gt_output("seed4"),
+                         gt_output("seed5"),
+                         fluidRow(gt_output('seed6'), style = 'padding-bottom:200px')),
+                   f7Tab(tabName = "PowerRankings",
+                         icon = icon("medal"),
+                         h1(div("Power Rankings", style = "color:#580515;font-weight:bolder;font-size:40px;text-align:center;")),
+                         fluidRow(gt_output('powerRankings'), style = 'padding-bottom:200px')),
+                   f7Tab(tabName = "PowerRankingsTrends",
+                         icon = icon("arrow-trend-up"),
+                         h1(div("Power Ranking Trends", style = "color:#580515;font-weight:bolder;font-size:40px;text-align:center;")),
+                         dropdown(
+                           label = "Plot Inputs", style = "unite", size = "sm", 
+                           icon = icon('gear'),
+                           f7Select("yaxis", "Y-Axis", 
+                                       choices = c("Rank", "Projected Wins"="Projected_Wins", "Projected PF"="Projected_PF", "Playoff Berth Liklihood"="Playoff_Berth_Liklihood", "First Round Bye Liklihood"="First_Round_Bye_Liklihood", "Championship Liklihood"="Championship_Liklihood"), 
+                                       selected = sample(c("Rank", "Projected Wins"="Projected_Wins", "Projected PF"="Projected_PF", "Playoff Berth Liklihood"="Playoff_Berth_Liklihood", "First Round Bye Liklihood"="First_Round_Bye_Liklihood", "Championship Liklihood"="Championship_Liklihood"), 1)),
+                           f7CheckboxGroup("teams", "Selected Teams", choices = team$owner[1:11], selected = sample(team$owner[1:11], 1)),
+                           f7Button("selectall", label="Select/Deselect All", rounded = T)),
+                         fluidRow(plotOutput("powerRankingPlot", height = "600px"), style = 'padding-bottom:325px; padding-top:20px;')),
+                   f7Tab(tabName = "Survivor",
+                         icon = icon("skull-crossbones"),
+                         h1(div("Survivor Contest", style = "color:#580515;font-weight:bolder;font-size:40px;text-align:center;")),
+                         gt_output("sur_wk10"),
+                         gt_output("sur_wk9"),
+                         gt_output("sur_wk8"),
+                         gt_output("sur_wk7"),
+                         gt_output("sur_wk6"),
+                         gt_output("sur_wk5"),
+                         gt_output("sur_wk4"),
+                         gt_output("sur_wk3"),
+                         gt_output("sur_wk2"),
+                         fluidRow(gt_output('sur_wk1'), style = 'padding-bottom:200px'))
+                   )
+            )
+                
 
 server = function(input, output, session) {
   
-  session$onSessionEnded(function() {
-    stopApp()
-  })
-  
-  output$playoffs = renderUI(if(as.numeric(input$week) > 13){img(src="playoffs.gif", height = 300)}
+  output$playoffs = renderUI(if(as.numeric(input$week) > 13){img(src="playoffs.gif")}
                              else{img(src="playoffs.gif", height = 0)})
   
   standings = reactive(team %>%
@@ -848,17 +867,17 @@ server = function(input, output, session) {
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
                                                         fill = "#ead89e", alpha = 0.8, font_weight = "normal") %>%
                                       gt_merge_stack(col1 = score, col2 = projection,
-                                                     font_size = c('25px', '15px'),
+                                                     font_size = c('20px', '15px'),
                                                      font_weight = c('bold', 'normal')) %>%
                                       gt_merge_stack_with_plots(week = as.numeric(input$week), 
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
-                                                                font_size = c("25px", "15px"),
+                                                                font_size = c("20px", "15px"),
                                                                 font_weight = c("bold", "normal"),
                                                                 type = "shaded") %>%
-                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
-                                      cols_width(logo ~ px(100),
-                                                 name ~ px(300),
-                                                 score ~ px(120)) %>%
+                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 75) %>%
+                                      cols_width(logo ~ pct(25),
+                                                 name ~ pct(50),
+                                                 score ~ pct(25)) %>%
                                       cols_hide(columns = c(still_playing, win)) %>%
                                       tab_style(style = list(cell_text(weight = 'bold', size = 'x-large', align = 'left')),
                                                 locations = cells_body(columns = name)) %>%
@@ -928,17 +947,17 @@ server = function(input, output, session) {
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
                                                         fill = "#ead89e", alpha = 0.8) %>%
                                       gt_merge_stack(col1 = score, col2 = projection,
-                                                     font_size = c('25px', '15px'),
+                                                     font_size = c('20px', '15px'),
                                                      font_weight = c('bold', 'normal')) %>%
                                       gt_merge_stack_with_plots(week = as.numeric(input$week),
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
-                                                                font_size = c("25px", "15px"),
+                                                                font_size = c("20px", "15px"),
                                                                 font_weight = c("bold", "normal"),
                                                                 type = "shaded") %>%
-                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
-                                      cols_width(logo ~ px(100),
-                                                 name ~ px(300),
-                                                 score ~ px(120)) %>%
+                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 75) %>%
+                                      cols_width(logo ~ pct(25),
+                                                 name ~ pct(50),
+                                                 score ~ pct(25)) %>%
                                       cols_hide(columns = c(still_playing, win)) %>%
                                       tab_style(style = list(cell_text(weight = 'bold', size = 'x-large', align = 'left')),
                                                 locations = cells_body(columns = name)) %>%
@@ -1008,17 +1027,17 @@ server = function(input, output, session) {
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
                                                         fill = "#ead89e", alpha = 0.8) %>%
                                       gt_merge_stack(col1 = score, col2 = projection,
-                                                     font_size = c('25px', '15px'),
+                                                     font_size = c('20px', '15px'),
                                                      font_weight = c('bold', 'normal')) %>%
                                       gt_merge_stack_with_plots(week = as.numeric(input$week),
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
-                                                                font_size = c("25px", "15px"),
+                                                                font_size = c("20px", "15px"),
                                                                 font_weight = c("bold", "normal"),
                                                                 type = "shaded") %>%
-                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
-                                      cols_width(logo ~ px(100),
-                                                 name ~ px(300),
-                                                 score ~ px(120)) %>%
+                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 75) %>%
+                                      cols_width(logo ~ pct(25),
+                                                 name ~ pct(50),
+                                                 score ~ pct(25)) %>%
                                       cols_hide(columns = c(still_playing, win)) %>%
                                       tab_style(style = list(cell_text(weight = 'bold', size = 'x-large', align = 'left')),
                                                 locations = cells_body(columns = name)) %>%
@@ -1088,17 +1107,17 @@ server = function(input, output, session) {
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
                                                         fill = "#ead89e", alpha = 0.8) %>%
                                       gt_merge_stack(col1 = score, col2 = projection,
-                                                     font_size = c('25px', '15px'),
+                                                     font_size = c('20px', '15px'),
                                                      font_weight = c('bold', 'normal')) %>%
                                       gt_merge_stack_with_plots(week = as.numeric(input$week),
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
-                                                                font_size = c("25px", "15px"),
+                                                                font_size = c("20px", "15px"),
                                                                 font_weight = c("bold", "normal"),
                                                                 type = "shaded") %>%
-                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
-                                      cols_width(logo ~ px(100),
-                                                 name ~ px(300),
-                                                 score ~ px(120)) %>%
+                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 75) %>%
+                                      cols_width(logo ~ pct(25),
+                                                 name ~ pct(50),
+                                                 score ~ pct(25)) %>%
                                       cols_hide(columns = c(still_playing, win)) %>%
                                       tab_style(style = list(cell_text(weight = 'bold', size = 'x-large', align = 'left')),
                                                 locations = cells_body(columns = name)) %>%
@@ -1168,17 +1187,17 @@ server = function(input, output, session) {
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
                                                         fill = "#ead89e", alpha = 0.8) %>%
                                       gt_merge_stack(col1 = score, col2 = projection,
-                                                     font_size = c('25px', '15px'),
+                                                     font_size = c('20px', '15px'),
                                                      font_weight = c('bold', 'normal')) %>%
                                       gt_merge_stack_with_plots(week = as.numeric(input$week),
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
-                                                                font_size = c("25px", "15px"),
+                                                                font_size = c("20px", "15px"),
                                                                 font_weight = c("bold", "normal"),
                                                                 type = "shaded") %>%
-                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
-                                      cols_width(logo ~ px(100),
-                                                 name ~ px(300),
-                                                 score ~ px(120)) %>%
+                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 75) %>%
+                                      cols_width(logo ~ pct(25),
+                                                 name ~ pct(50),
+                                                 score ~ pct(25)) %>%
                                       cols_hide(columns = c(still_playing, win)) %>%
                                       tab_style(style = list(cell_text(weight = 'bold', size = 'x-large', align = 'left')),
                                                 locations = cells_body(columns = name)) %>%
@@ -1248,17 +1267,17 @@ server = function(input, output, session) {
                                       gt_highlight_rows(columns = gt::everything(), rows = win > 0,
                                                         fill = "#ead89e", alpha = 0.8) %>%
                                       gt_merge_stack(col1 = score, col2 = projection,
-                                                     font_size = c('25px', '15px'),
+                                                     font_size = c('20px', '15px'),
                                                      font_weight = c('bold', 'normal'),) %>%
                                       gt_merge_stack_with_plots(week = as.numeric(input$week),
                                                                 col1 = name, col2 = owner, col3 = wl, col4 = scores,
-                                                                font_size = c("25px", "15px"),
+                                                                font_size = c("20px", "15px"),
                                                                 font_weight = c("bold", "normal"),
                                                                 type = "shaded") %>%
-                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 100) %>%
-                                      cols_width(logo ~ px(100),
-                                                 name ~ px(300),
-                                                 score ~ px(120)) %>%
+                                      gt_merge_img_circle(col1 = logo, col2 = record, col3 = ov_record, height = 75) %>%
+                                      cols_width(logo ~ pct(25),
+                                                 name ~ pct(50),
+                                                 score ~ pct(25)) %>%
                                       cols_hide(columns = c(still_playing, win)) %>%
                                       tab_style(style = list(cell_text(weight = 'bold', size = 'x-large', align = 'left')),
                                                 locations = cells_body(columns = name)) %>%
@@ -1297,17 +1316,14 @@ server = function(input, output, session) {
                                             ov_record = "Overall Record",
                                             t_pf = "PF",
                                             t_pa = "PA") %>%
-                                 cols_width(logo ~ px(50),
-                                            name ~ px(90),
-                                            record ~ px(50),
-                                            ov_record ~ px(50),
-                                            t_pf ~ px(60),
-                                            t_pa ~ px(60)) %>%
+                                 cols_width(logo ~ pct(14),
+                                            name ~ pct(25),
+                                            record ~ pct(14),
+                                            ov_record ~ pct(14),
+                                            t_pf ~ pct(16),
+                                            t_pa ~ pct(16)) %>%
                                  cols_align(align = "center", columns = c(logo, record, ov_record, t_pf, t_pa)) %>%
-                                 fmt_number(columns = c(t_pf, t_pa), decimals = 1) %>%
-                                 tab_header(title = html("<center><b>STANDINGS</b></center>")) %>%
-                                 tab_options(heading.title.font.size = "18px",
-                                             heading.background.color = "grey"))
+                                 fmt_number(columns = c(t_pf, t_pa), decimals = 1))
   
   output$seed1 = render_gt(standings() %>%
                              filter(t_wp >= standings() %>% arrange(desc(t_wp)) %>% filter(row_number() == 1) %>% select(t_wp) %>% as.numeric() - 1) %>%
@@ -1344,11 +1360,11 @@ server = function(input, output, session) {
                                         record = "Record",
                                         t_pf = "PF",
                                         tb_h2h_record = "TB Record") %>%
-                             cols_width(logo ~ px(50),
-                                        name ~ px(110),
-                                        record ~ px(65),
-                                        t_pf ~ px(70),
-                                        tb_h2h_record ~ px(65)) %>%
+                             cols_width(logo ~ pct(14),
+                                        name ~ pct(30),
+                                        record ~ pct(18),
+                                        t_pf ~ pct(19),
+                                        tb_h2h_record ~ pct(18)) %>%
                              cols_align(align = "center", columns = c(logo, record, t_pf, tb_h2h_record)) %>%
                              fmt_number(columns = c(t_pf), decimals = 1) %>%
                              tab_header(title = html("<center><b>1st Seed Race</b></center>")) %>%
@@ -1395,9 +1411,9 @@ server = function(input, output, session) {
                              cols_label(logo = "",
                                         name = "Team",
                                         t_pf = "PF") %>%
-                             cols_width(logo ~ px(50),
-                                        name ~ px(110),
-                                        t_pf ~ px(200)) %>%
+                             cols_width(logo ~ pct(14),
+                                        name ~ pct(30),
+                                        t_pf ~ pct(56)) %>%
                              cols_align(align = "center", columns = c(logo, t_pf)) %>%
                              fmt_number(columns = c(t_pf), decimals = 1) %>%
                              tab_header(title = html("<center><b>2nd Seed Race</b></center>")) %>%
@@ -1449,11 +1465,11 @@ server = function(input, output, session) {
                                         record = "Record",
                                         t_pf = "PF",
                                         tb_h2h_record = "TB Record") %>%
-                             cols_width(logo ~ px(50),
-                                        name ~ px(110),
-                                        record ~ px(65),
-                                        t_pf ~ px(70),
-                                        tb_h2h_record ~ px(65)) %>%
+                             cols_width(logo ~ pct(14),
+                                        name ~ pct(30),
+                                        record ~ pct(18),
+                                        t_pf ~ pct(19),
+                                        tb_h2h_record ~ pct(18)) %>%
                              cols_align(align = "center", columns = c(logo, record, t_pf, tb_h2h_record)) %>%
                              fmt_number(columns = c(t_pf), decimals = 1) %>%
                              tab_header(title = html("<center><b>3rd Seed Race</b></center>")) %>%
@@ -1528,11 +1544,11 @@ server = function(input, output, session) {
                                         record = "Record",
                                         t_pf = "PF",
                                         tb_h2h_record = "TB Record") %>%
-                             cols_width(logo ~ px(50),
-                                        name ~ px(110),
-                                        record ~ px(65),
-                                        t_pf ~ px(70),
-                                        tb_h2h_record ~ px(65)) %>%
+                             cols_width(logo ~ pct(14),
+                                        name ~ pct(30),
+                                        record ~ pct(18),
+                                        t_pf ~ pct(19),
+                                        tb_h2h_record ~ pct(18)) %>%
                              cols_align(align = "center", columns = c(logo, record, t_pf, tb_h2h_record)) %>%
                              fmt_number(columns = c(t_pf), decimals = 1) %>%
                              tab_header(title = html("<center><b>4th Seed Race</b></center>")) %>%
@@ -1594,10 +1610,10 @@ server = function(input, output, session) {
                                         name = "Team",
                                         hf_wins = "L7W Wins",
                                         hf_pf = "L7W PF") %>%
-                             cols_width(logo ~ px(50),
-                                        name ~ px(110),
-                                        hf_wins ~ px(65),
-                                        hf_pf ~ px(135)) %>%
+                             cols_width(logo ~ pct(14),
+                                        name ~ pct(30),
+                                        hf_wins ~ pct(18),
+                                        hf_pf ~ pct(38)) %>%
                              cols_align(align = "center", columns = c(logo, hf_pf, hf_wins)) %>%
                              fmt_number(columns = c(hf_pf), decimals = 1) %>%
                              tab_header(title = html("<center><b>Hot Finish Wildcard Race</b></center>")) %>%
@@ -1608,7 +1624,7 @@ server = function(input, output, session) {
                            else{data.frame(url = c("https://i.pinimg.com/originals/b7/21/34/b72134112b54864e4948865375ecbb11.gif")) %>%
                                gt() %>%
                                gt_img_rows(columns = url, height = 200) %>%
-                               cols_width(url ~ px(360)) %>%
+                               cols_width(url ~ pct(100)) %>%
                                gt_theme_pff() %>%
                                cols_label(url = "Starts in Week 7") %>%
                                cols_align(align = "center", columns = c(url)) %>%
@@ -1651,9 +1667,9 @@ server = function(input, output, session) {
                              cols_label(logo = "",
                                         name = "Team",
                                         t_pf = "PF") %>%
-                             cols_width(logo ~ px(50),
-                                        name ~ px(110),
-                                        t_pf ~ px(200)) %>%
+                             cols_width(logo ~ pct(14),
+                                        name ~ pct(30),
+                                        t_pf ~ pct(56)) %>%
                              cols_align(align = "center", columns = c(logo, t_pf)) %>%
                              fmt_number(columns = c(t_pf), decimals = 1) %>%
                              tab_header(title = html("<center><b>Points Wildcard Race</b></center>")) %>%
@@ -1681,9 +1697,17 @@ server = function(input, output, session) {
                                      left_join(team_ov_record(), by = 'id') %>%
                                      left_join(standings() %>% select(owner, p_pf), by = 'owner') %>%
                                      mutate(ppg = p_pf / wk) %>%
-                                     select(rank, delta_rank, logo, name, owner, record, ov_record, ppg, proj_wins = wins, delta_proj_wins = delta_wins, 
+                                     select(rank, delta_rank, logo, name, owner, proj_wins = wins, delta_proj_wins = delta_wins, 
                                             proj_pf = pf, delta_proj_pf = delta_pf, playoffs, delta_playoffs, frb, delta_frb, champion, delta_champion) %>%
-                                     gt() %>% cols_width(logo ~ px(60)) %>%
+                                     gt() %>% 
+                                     cols_width(rank ~ pct(10),
+                                                logo ~ pct(13),
+                                                name ~ pct(17),
+                                                proj_wins ~ pct(12),
+                                                proj_pf ~ pct(12),
+                                                playoffs ~ pct(12),
+                                                frb ~ pct(12),
+                                                champion ~ pct(12)) %>%
                                      gt_img_circle(column = logo, height = 50) %>%
                                      gt_merge_stack(col1 = name, col2 = owner) %>%
                                      gt_merge_stack_delta(col1 = rank, col2 = delta_rank, font_size = c('20px', '10px')) %>%
@@ -1692,21 +1716,24 @@ server = function(input, output, session) {
                                      gt_merge_stack_delta(col1 = playoffs, col2 = delta_playoffs, font_weight = c('normal', 'normal'), font_size = c('12px', '8px')) %>%
                                      gt_merge_stack_delta(col1 = frb, col2 = delta_frb, font_weight = c('normal', 'normal'), font_size = c('12px', '8px')) %>%
                                      gt_merge_stack_delta(col1 = champion, col2 = delta_champion, font_weight = c('normal', 'normal'), font_size = c('12px', '8px')) %>%
-                                     cols_align(align = 'center', columns = c(rank, record, ov_record, ppg, proj_wins, proj_pf, playoffs, frb, champion)) %>%
+                                     cols_align(align = 'center', columns = c(rank, proj_wins, proj_pf, playoffs, frb, champion)) %>%
                                      gt_theme_538() %>% 
                                      cols_label(logo = "", 
                                                 name = "Team", 
-                                                ov_record = "Overall Record",
                                                 proj_wins = "Proj. Wins",
                                                 proj_pf = "Proj. PF",
                                                 playoffs = "Playoff Birth",
-                                                frb = "1st Round Bye") %>%
-                                     fmt_number(columns = c(ppg, proj_wins), decimals = 1) %>%
+                                                frb = "1st Round Bye",
+                                                champion = "Champ") %>%
+                                     fmt_number(columns = c(proj_wins), decimals = 1) %>%
                                      fmt_number(columns = c(proj_pf), decimals = 0) %>%
                                      fmt_number(columns = c(playoffs, frb, champion), scale_by = 100, decimals = 1) %>%
                                      tab_spanner(
                                        label = "Simulation Liklihood",
-                                       columns = c(playoffs, frb, champion)))
+                                       columns = c(playoffs, frb, champion)) %>%
+                                     tab_options(column_labels.font.size = 8) %>%
+                                     tab_footnote(footnote = paste0("Power Rankings and simulations last updated after Week ", 
+                                                                    sim_results %>% select(wk) %>% max())))
   
 output$powerRankingPlot = renderPlot(sim_results %>%
                                        left_join(data.frame(team = sort(unique(sim_results$team)), 
@@ -1737,31 +1764,33 @@ output$powerRankingPlot = renderPlot(sim_results %>%
 
 observe({
   if (input$selectall > 0) {
-    if (input$selectall %% 2 == 0){
-      updateCheckboxGroupInput(session=session, 
+    if (input$selectall %% 2 != 0){
+      updateF7Checkbox(session=session, 
                                inputId="teams",
-                               choices = team$owner[1:11], 
-                               selected = team$owner[1:11])
+                               value = team$owner[1:11])
       
     } else {
-      updateCheckboxGroupInput(session=session, 
-                               inputId="teams",
-                               choices = team$owner[1:11], 
-                               selected = NULL)
-      }}})
+      updateF7Checkbox(session=session, 
+                       inputId="teams",
+                       value = "")
+    }}})
 
 output$sur_wk1 = render_gt(
   if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 0){
     schedule %>%
       filter(matchupPeriodId == 1, teamId != 12) %>%
-      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
-      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      left_join(team %>% select(id, name, owner, logo), by = c('teamId'='id')) %>%
+      select(logo, name, owner, totalPointsLive, totalProjectedPointsLive) %>%
       arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = owner) %>%
       gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(totalPointsLive = 'PF') %>%
+      cols_label(totalPointsLive = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(totalPointsLive)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), totalPointsLive ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 1</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -1770,13 +1799,17 @@ output$sur_wk1 = render_gt(
   else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 0){
     AllGames %>%
       filter(season == CS, week == 1, team != "Ghost of Dakota Frantum") %>%
-      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
-      select(name, team, score) %>%
+      left_join(team %>% select(name, owner, logo), by = c('team'='owner')) %>%
+      select(logo, name, team, score) %>%
       arrange(desc(score)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(score = 'PF') %>%
+      cols_label(score = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(score)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), score ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 1</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -1798,15 +1831,19 @@ output$sur_wk2 = render_gt(
   if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 1){
     schedule %>%
       filter(matchupPeriodId == 2, teamId != 12) %>%
-      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
-      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      left_join(team %>% select(id, name, owner, logo), by = c('teamId'='id')) %>%
+      select(logo, name, owner, totalPointsLive, totalProjectedPointsLive) %>%
       filter(owner != loser_sur_1()) %>%
       arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = owner) %>%
       gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(totalPointsLive = 'PF') %>%
+      cols_label(totalPointsLive = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(totalPointsLive)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), totalPointsLive ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 2</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -1815,14 +1852,18 @@ output$sur_wk2 = render_gt(
   else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 1){
     AllGames %>%
       filter(season == CS, week == 2, team != "Ghost of Dakota Frantum") %>%
-      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
-      select(name, team, score) %>%
+      left_join(team %>% select(name, owner, logo), by = c('team'='owner')) %>%
+      select(logo, name, team, score) %>%
       filter(team != loser_sur_1()) %>%
       arrange(desc(score)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(score = 'PF') %>%
+      cols_label(score = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(score)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), score ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 2</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -1845,15 +1886,19 @@ output$sur_wk3 = render_gt(
   if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 2){
     schedule %>%
       filter(matchupPeriodId == 3, teamId != 12) %>%
-      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
-      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      left_join(team %>% select(id, name, owner, logo), by = c('teamId'='id')) %>%
+      select(logo, name, owner, totalPointsLive, totalProjectedPointsLive) %>%
       filter(owner != loser_sur_1() & owner != loser_sur_2()) %>%
       arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = owner) %>%
       gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(totalPointsLive = 'PF') %>%
+      cols_label(totalPointsLive = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(totalPointsLive)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), totalPointsLive ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 3</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -1862,14 +1907,18 @@ output$sur_wk3 = render_gt(
   else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 2){
     AllGames %>%
       filter(season == CS, week == 3, team != "Ghost of Dakota Frantum") %>%
-      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
-      select(name, team, score) %>%
+      left_join(team %>% select(name, owner, logo), by = c('team'='owner')) %>%
+      select(logo, name, team, score) %>%
       filter(team != loser_sur_1() & team != loser_sur_2()) %>%
       arrange(desc(score)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(score = 'PF') %>%
+      cols_label(score = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(score)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), score ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 3</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -1892,15 +1941,19 @@ output$sur_wk4 = render_gt(
   if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 3){
     schedule %>%
       filter(matchupPeriodId == 4, teamId != 12) %>%
-      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
-      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      left_join(team %>% select(id, name, owner, logo), by = c('teamId'='id')) %>%
+      select(logo, name, owner, totalPointsLive, totalProjectedPointsLive) %>%
       filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3()) %>%
       arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = owner) %>%
       gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(totalPointsLive = 'PF') %>%
+      cols_label(totalPointsLive = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(totalPointsLive)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), totalPointsLive ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 4</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -1909,14 +1962,18 @@ output$sur_wk4 = render_gt(
   else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 3){
     AllGames %>%
       filter(season == CS, week == 4, team != "Ghost of Dakota Frantum") %>%
-      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
-      select(name, team, score) %>%
+      left_join(team %>% select(name, owner, logo), by = c('team'='owner')) %>%
+      select(logo, name, team, score) %>%
       filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3()) %>%
       arrange(desc(score)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(score = 'PF') %>%
+      cols_label(score = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(score)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), score ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 4</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -1939,15 +1996,19 @@ output$sur_wk5 = render_gt(
   if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 4){
     schedule %>%
       filter(matchupPeriodId == 5, teamId != 12) %>%
-      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
-      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      left_join(team %>% select(id, name, owner, logo), by = c('teamId'='id')) %>%
+      select(logo, name, owner, totalPointsLive, totalProjectedPointsLive) %>%
       filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4()) %>%
       arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = owner) %>%
       gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(totalPointsLive = 'PF') %>%
+      cols_label(totalPointsLive = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(totalPointsLive)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), totalPointsLive ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 5</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -1956,14 +2017,18 @@ output$sur_wk5 = render_gt(
   else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 4){
     AllGames %>%
       filter(season == CS, week == 5, team != "Ghost of Dakota Frantum") %>%
-      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
-      select(name, team, score) %>%
+      left_join(team %>% select(name, owner, logo), by = c('team'='owner')) %>%
+      select(logo, name, team, score) %>%
       filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4()) %>%
       arrange(desc(score)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(score = 'PF') %>%
+      cols_label(score = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(score)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), score~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 5</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -1986,16 +2051,20 @@ output$sur_wk6 = render_gt(
   if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 5){
     schedule %>%
       filter(matchupPeriodId == 6, teamId != 12) %>%
-      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
-      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      left_join(team %>% select(id, name, owner, logo), by = c('teamId'='id')) %>%
+      select(logo, name, owner, totalPointsLive, totalProjectedPointsLive) %>%
       filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4() &
                owner != loser_sur_5()) %>%
       arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = owner) %>%
       gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(totalPointsLive = 'PF') %>%
+      cols_label(totalPointsLive = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(totalPointsLive)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), totalPointsLive ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 6</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -2004,15 +2073,19 @@ output$sur_wk6 = render_gt(
   else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 5){
     AllGames %>%
       filter(season == CS, week == 6, team != "Ghost of Dakota Frantum") %>%
-      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
-      select(name, team, score) %>%
+      left_join(team %>% select(name, owner, logo), by = c('team'='owner')) %>%
+      select(logo, name, team, score) %>%
       filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
                team != loser_sur_5()) %>%
       arrange(desc(score)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(score = 'PF') %>%
+      cols_label(score = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(score)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), score~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 6</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -2036,16 +2109,20 @@ output$sur_wk7 = render_gt(
   if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 6){
     schedule %>%
       filter(matchupPeriodId == 7, teamId != 12) %>%
-      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
-      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      left_join(team %>% select(id, name, owner, logo), by = c('teamId'='id')) %>%
+      select(logo, name, owner, totalPointsLive, totalProjectedPointsLive) %>%
       filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4() &
                owner != loser_sur_5() & owner != loser_sur_6()) %>%
       arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = owner) %>%
       gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(totalPointsLive = 'PF') %>%
+      cols_label(totalPointsLive = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(totalPointsLive)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), totalPointsLive ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 7</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -2054,15 +2131,19 @@ output$sur_wk7 = render_gt(
   else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 6){
     AllGames %>%
       filter(season == CS, week == 7, team != "Ghost of Dakota Frantum") %>%
-      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
-      select(name, team, score) %>%
+      left_join(team %>% select(name, owner, logo), by = c('team'='owner')) %>%
+      select(logo, name, team, score) %>%
       filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
                team != loser_sur_5() & team != loser_sur_6()) %>%
       arrange(desc(score)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(score = 'PF') %>%
+      cols_label(score = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(score)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), score~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 7</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -2086,16 +2167,20 @@ output$sur_wk8 = render_gt(
   if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 7){
     schedule %>%
       filter(matchupPeriodId == 8, teamId != 12) %>%
-      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
-      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      left_join(team %>% select(id, name, owner, logo), by = c('teamId'='id')) %>%
+      select(logo, name, owner, totalPointsLive, totalProjectedPointsLive) %>%
       filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4() &
                owner != loser_sur_5() & owner != loser_sur_6() & owner != loser_sur_7()) %>%
       arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = owner) %>%
       gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(totalPointsLive = 'PF') %>%
+      cols_label(totalPointsLive = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(totalPointsLive)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), totalPointsLive ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 8</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -2104,15 +2189,19 @@ output$sur_wk8 = render_gt(
   else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 7){
     AllGames %>%
       filter(season == CS, week == 8, team != "Ghost of Dakota Frantum") %>%
-      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
-      select(name, team, score) %>%
+      left_join(team %>% select(name, owner, logo), by = c('team'='owner')) %>%
+      select(logo, name, team, score) %>%
       filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
                team != loser_sur_5() & team != loser_sur_6() & team != loser_sur_7()) %>%
       arrange(desc(score)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(score = 'PF') %>%
+      cols_label(score = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(score)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), score~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 8</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -2136,16 +2225,20 @@ output$sur_wk9 = render_gt(
   if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 8){
     schedule %>%
       filter(matchupPeriodId == 9, teamId != 12) %>%
-      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
-      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      left_join(team %>% select(id, name, owner, logo), by = c('teamId'='id')) %>%
+      select(logo, name, owner, totalPointsLive, totalProjectedPointsLive) %>%
       filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4() &
                owner != loser_sur_5() & owner != loser_sur_6() & owner != loser_sur_7() & owner != loser_sur_8()) %>%
       arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = owner) %>%
       gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(totalPointsLive = 'PF') %>%
+      cols_label(totalPointsLive = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(totalPointsLive)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), totalPointsLive ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 9</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -2154,15 +2247,19 @@ output$sur_wk9 = render_gt(
   else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 8){
     AllGames %>%
       filter(season == CS, week == 9, team != "Ghost of Dakota Frantum") %>%
-      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
-      select(name, team, score) %>%
+      left_join(team %>% select(name, owner, logo), by = c('team'='owner')) %>%
+      select(logo, name, team, score) %>%
       filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
                team != loser_sur_5() & team != loser_sur_6() & team != loser_sur_7() & team != loser_sur_8()) %>%
       arrange(desc(score)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(score = 'PF') %>%
+      cols_label(score = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(score)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), score~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 9</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -2186,16 +2283,20 @@ output$sur_wk10 = render_gt(
   if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() == 9){
     schedule %>%
       filter(matchupPeriodId ==10, teamId != 12) %>%
-      left_join(team %>% select(id, name, owner), by = c('teamId'='id')) %>%
-      select(name, owner, totalPointsLive, totalProjectedPointsLive) %>%
+      left_join(team %>% select(id, name, owner, logo), by = c('teamId'='id')) %>%
+      select(logo, name, owner, totalPointsLive, totalProjectedPointsLive) %>%
       filter(owner != loser_sur_1() & owner != loser_sur_2() & owner != loser_sur_3() & owner != loser_sur_4() &
                owner != loser_sur_5() & owner != loser_sur_6() & owner != loser_sur_7() & owner != loser_sur_8() & owner != loser_sur_9()) %>%
       arrange(desc(totalPointsLive), desc(totalProjectedPointsLive)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = owner) %>%
       gt_merge_stack(col1 = totalPointsLive, col2 = totalProjectedPointsLive) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(totalPointsLive = 'PF') %>%
+      cols_label(totalPointsLive = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(totalPointsLive)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), totalPointsLive ~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 10</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%
@@ -2206,15 +2307,19 @@ output$sur_wk10 = render_gt(
   else if(AllGames %>% filter(season==CS, !is.na(score)) %>% select(week) %>% unique() %>% max() > 9){
     AllGames %>%
       filter(season == CS, week == 10, team != "Ghost of Dakota Frantum") %>%
-      left_join(team %>% select(name, owner), by = c('team'='owner')) %>%
-      select(name, team, score) %>%
+      left_join(team %>% select(name, owner, logo), by = c('team'='owner')) %>%
+      select(logo, name, team, score) %>%
       filter(team != loser_sur_1() & team != loser_sur_2() & team != loser_sur_3() & team != loser_sur_4() &
                team != loser_sur_5() & team != loser_sur_6() & team != loser_sur_7() & team != loser_sur_8() & team != loser_sur_9()) %>%
       arrange(desc(score)) %>%
       gt() %>%
       gt_merge_stack(col1 = name, col2 = team) %>%
+      gt_img_circle(column = logo, height = 50) %>%
       gt_theme_pff() %>%
-      cols_label(score = 'PF') %>%
+      cols_label(score = 'PF',
+                 logo = "") %>%
+      cols_align(align = 'center', columns = c(score)) %>%
+      cols_width(logo ~ pct(20), name ~ pct(50), score~ pct(30)) %>%
       tab_header(title = html("<center><b>Wk 10</b></center>")) %>%
       tab_options(heading.title.font.size = "14px",
                   heading.background.color = "grey") %>%

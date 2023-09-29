@@ -1,0 +1,13 @@
+name: WOFFL
+title: WOFFL
+username: jpatak
+account: jpatak
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 10034623
+bundleId: 7744292
+url: https://jpatak.shinyapps.io/WOFFL/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: AllGames.csv|sim_results_2023.csv
