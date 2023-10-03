@@ -531,5 +531,5 @@ simulated_season_results = a[[1]] %>%
 
 all_simulated_results = a[[2]] 
 
-path_out = "C:/Users/jerem/Documents/Fantasy/2023/sim_results_2023.csv"
+path_out = "C:/Users/jerem/Documents/Fantasy/WOFFL/WOFFL_stats_portal/sim_results_2023.csv"
 read.csv(path_out) %>% rbind(simulated_season_results) %>% write.csv(path_out, row.names = F)
