@@ -94,18 +94,22 @@ simulate_season = function(n){
     #set weight put on each part of means and sd
     weight_cs = case_when(weeks_played == 0 ~ weeks_played/55,
                           weeks_played %in% c(1:5) ~ sum(1:weeks_played) / 55,
-                          weeks_played > 10 ~ .75,
+                          weeks_played >=7  ~ .4545,
                           .default = (15+(5*(weeks_played-5))) / 55)
     
-    weight_hist = case_when(weeks_played <= 5 ~ .25,
-                            weeks_played > 9 ~ 0,
-                            .default = .125)
+    weight_all = case_when(weeks_played <= 5 ~ .7,
+                           weeks_played >= 10 ~ .34,
+                           weeks_played >= 8 ~ .4,
+                           .default = .55)
     
     weight_l5 = case_when(weeks_played < 8 ~ 0,
-                          weeks_played > 10 ~ .25,
-                          .default = .18)
+                          weeks_played >= 10 ~ .16,
+                          .default = .10)
     
-    weight_all = 1 - weight_cs - weight_hist - weight_l5
+    weight_hist = ifelse(1 - weight_cs - weight_all - weight_l5 < 0, 0, 1 - weight_cs - weight_all - weight_l5)
+    
+    
+    
     
     #simulate scores for rs
     ts_sim_i = team_stats %>%
