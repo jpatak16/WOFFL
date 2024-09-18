@@ -6,12 +6,12 @@ output: pdf_document
 
 ```{r}
 library(pacman)
-p_load(dplyr, stargazer, data.table, formattable, tidyr, ggplot2, readxl, gganimate, janitor, magrittr, kableExtra, gridExtra, ggalt, forcats, gt)
+p_load(dplyr, stargazer, data.table, formattable, tidyr, ggplot2, readxl, gganimate, janitor, magrittr, kableExtra, gridExtra, ggalt, forcats, gt, gtExtras)
 ```
 
 ```{r}
 #import data set
-AllGames = read_excel("WOFFL_stats_portal/AllGames.xlsx", sheet = "All Games") %>%
+AllGames = read.csv("WOFFL_stats_portal/AllGames.csv") %>%
   clean_names() %>%
   mutate(result = ifelse(score > opponent_score, 1, 0)) %>%
   group_by(ov_wk) %>%

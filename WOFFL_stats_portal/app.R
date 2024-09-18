@@ -591,7 +591,7 @@ live_scoring <- function(leagueId = ffl_id(), yetToPlay = FALSE,
   dat <- ffl_api(
     leagueId = 313259,
     view = c("mScoreboard", "mRoster"),
-    seasonId = 2023
+    seasonId = 2024
   )
   s <- tibble::tibble(
     matchupPeriodId = c(
@@ -621,7 +621,7 @@ live_scoring <- function(leagueId = ffl_id(), yetToPlay = FALSE,
   return(s)
 }
 
-dat <- ffl_api(leagueId = 313259, view = c("mScoreboard", "mRoster"), seasonId = 2023)
+dat <- ffl_api(leagueId = 313259, view = c("mScoreboard", "mRoster"), seasonId = 2024)
 CW = dat$scoringPeriodId
 
 schedule = live_scoring() %>% mutate(totalPointsLive = ifelse(is.na(totalPointsLive), 0, totalPointsLive),
