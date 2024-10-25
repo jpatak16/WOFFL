@@ -11,7 +11,7 @@ p_load(dplyr, stargazer, data.table, formattable, tidyr, ggplot2, readxl, gganim
 
 ```{r}
 #import data set
-AllGames = read.csv("WOFFL_stats_portal/AllGames.csv") %>%
+AllGames = read.csv("~/Fantasy/WOFFL/WOFFL_stats_portal/AllGames.csv") %>%
   clean_names() %>%
   mutate(result = ifelse(score > opponent_score, 1, 0)) %>%
   group_by(ov_wk) %>%
@@ -20,6 +20,7 @@ AllGames = read.csv("WOFFL_stats_portal/AllGames.csv") %>%
   mutate(opp_ov_wins = order(order(opponent_score, decreasing = FALSE)) - 1) %>%
   mutate(opp_ov_losses = order(order(opponent_score, decreasing = TRUE)) - 1) %>%
   ungroup()
+
 #find current season and current week; CW means last week played
 CS = unique(AllGames$season) %>% max()
 CW = AllGames %>% filter(season==CS) %>% filter(!is.na(score)) %>% filter(score>0) %>% 

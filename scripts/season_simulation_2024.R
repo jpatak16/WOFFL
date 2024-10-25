@@ -346,6 +346,17 @@ simulate_season = function(n){
         result = ifelse(score>opponent_score, 1, 0)
       )
     
+    next_wk_wins = sim_season |>
+      filter(
+        week == weeks_played + 1
+      ) |>
+      select(
+        team, result
+      ) |>
+      rename(
+        win_nxt_game = result
+      )
+    
     #summarise all simulated matchups by summing wins and pts by team
     season_i_res = sim_season %>% 
       group_by(team) %>% 
@@ -1525,6 +1536,10 @@ simulate_season = function(n){
         frb, 
         champion, 
         second:eleventh
+      ) |>
+      left_join(
+        next_wk_wins,
+        by = "team"
       )
     
     all_sims = rbind(all_sims, season_i_res)
@@ -1534,7 +1549,7 @@ simulate_season = function(n){
   sim_results = all_sims %>% 
     group_by(team) %>%
     summarise(
-      across(c('wins':'eleventh'), 
+      across(c('wins':'win_nxt_game'), 
              mean)
     )
   
@@ -1557,6 +1572,46 @@ simulated_season_results = a[[1]] %>%
   )
 
 all_simulated_results = a[[2]] 
+
+wl_pofrb_chances <- all_simulated_results |>
+  summarise(
+    po_wl = mean(playoffs),
+    frb_wl = mean(frb),
+    .by = c("team", "win_nxt_game")
+  )
+
+win_nxt_chances <- wl_pofrb_chances |>
+  filter(
+    win_nxt_game == 1
+  ) |>
+  select(-win_nxt_game) |>
+  rename(
+    win_po = po_wl,
+    win_frb = frb_wl
+  )
+
+lose_nxt_chances <- wl_pofrb_chances |>
+  filter(
+    win_nxt_game == 0
+  ) |>
+  select(-win_nxt_game) |>
+  rename(
+    lose_po = po_wl,
+    lose_frb = frb_wl
+  )
+
+simulated_season_results <- simulated_season_results |>
+  left_join(
+    win_nxt_chances,
+    by = "team"
+  ) |>
+  left_join(
+    lose_nxt_chances,
+    by = "team"
+  ) |>
+  relocate(
+    wk, .after = last_col()
+  )
 
 path_out = "C:/Users/jerem/Documents/Fantasy/WOFFL/WOFFL_stats_portal/sim_results/sim_results_2024.csv"
 read.csv(path_out) %>% 
