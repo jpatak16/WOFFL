@@ -18,7 +18,11 @@ SeasonGames = read.csv(
     week, team, score, opponent, opponent_score
   ) %>%
   mutate(
-    result = ifelse(score > opponent_score, 1, 0),
+    result = case_when(
+      score > opponent_score ~ 1,
+      opponent_score > score ~ 0,
+      score == opponent_score ~ .5
+    ),
     score = ifelse(score==0, NA, score),
     opponent_score = ifelse(opponent_score==0, NA, opponent_score),
     result = ifelse(is.na(score), NA, result)
@@ -343,7 +347,11 @@ simulate_season = function(n){
         opponent_score = score.y
       ) %>%
       mutate(
-        result = ifelse(score>opponent_score, 1, 0)
+        result = case_when(
+          score > opponent_score ~ 1,
+          opponent_score > score ~ 0,
+          score == opponent_score ~ .5
+        )
       )
     
     next_wk_wins = sim_season |>
@@ -741,35 +749,161 @@ simulate_season = function(n){
         frb != 1
       ) %>%
       arrange(
-        desc(po_sd3), 
-        desc(po_sd4), 
-        desc(wins)
+        desc(wins),
+        desc(PF)
       ) %>%
       select(
         team, 
         wins, 
         PF
+      )
+    
+    n_wins_seed3 = po_seeds %>% 
+      arrange(
+        desc(wins),
+        desc(PF)
       ) %>% 
+      filter(
+        row_number() == 1
+      ) %>% 
+      select(wins) %>% 
+      as.numeric()
+    
+    teams_tie_sd3 = po_seeds %>% 
+      arrange(
+        desc(wins)
+      ) %>% 
+      filter(
+        row_number() %in% 1:(po_seeds %>% 
+                               arrange(
+                                 desc(wins)
+                               ) %>% 
+                               filter(
+                                 wins == n_wins_seed3
+                               ) %>% 
+                               select(team) %>% 
+                               nrow()
+        )
+      ) %>% 
+      select(team) %>% 
+      as.vector() %>% 
+      unlist()
+    
+    po_sd3_tab = po_seeds %>%
+      left_join(
+        sim_season %>% 
+          filter(
+            team %in% teams_tie_sd3,
+            opponent %in% teams_tie_sd3
+          ) %>% 
+          group_by(team) %>% 
+          summarise(
+            tb_h2h_seed3 = sum(result)
+          ),
+        by = 'team'
+      ) %>%
+      arrange(
+        desc(wins), 
+        desc(tb_h2h_seed3), 
+        desc(PF)
+      ) %>%
       mutate(
         seed3 = ifelse(
           row_number() == 1, 
           1, 
           0
-        ),
+        )
+      )
+    
+    po_sd3 <- po_sd3_tab |>
+      filter(
+        row_number() == 1
+      ) |>
+      pull(team)
+    
+    n_wins_seed4 = po_seeds %>% 
+      filter(
+        team != po_sd3
+      ) %>% 
+      arrange(
+        desc(wins),
+        desc(PF)
+      ) %>% 
+      filter(
+        row_number() == 1
+      ) %>% 
+      select(wins) %>% 
+      as.numeric()
+    
+    teams_tie_sd4 = po_seeds %>% 
+      filter(
+        team != po_sd3
+      ) %>% 
+      arrange(
+        desc(wins)
+      ) %>% 
+      filter(
+        row_number() %in% 1:(po_seeds %>% 
+                               filter(
+                                 team != po_sd3
+                               ) %>% 
+                               arrange(
+                                 desc(wins)
+                               ) %>% 
+                               filter(
+                                 wins == n_wins_seed4
+                               ) %>% 
+                               select(team) %>% 
+                               nrow()
+        )
+      ) %>% 
+      select(team) %>% 
+      as.vector() %>% 
+      unlist()
+    
+    po_sd4_tab = po_seeds %>%
+      left_join(
+        sim_season %>% 
+          filter(
+            team %in% teams_tie_sd4,
+            opponent %in% teams_tie_sd4
+          ) %>% 
+          group_by(team) %>% 
+          summarise(
+            tb_h2h_seed4 = sum(result)
+          ),
+        by = 'team'
+      ) %>%
+      arrange(
+        desc(wins), 
+        desc(tb_h2h_seed4), 
+        desc(PF)
+      ) %>%
+      filter(
+        team != po_sd3
+      ) %>%
+      mutate(
         seed4 = ifelse(
-          row_number() == 2, 
+          row_number() == 1, 
           1, 
           0
         )
       )
     
+    po_sd4 <- po_sd4_tab |>
+      filter(
+        row_number() == 1
+      ) |>
+      pull(team)
+    
     n_wins_seed5 = po_seeds %>% 
       filter(
-        seed3 != 1, 
-        seed4 != 1
+        team != po_sd3, 
+        team != po_sd4
       ) %>% 
       arrange(
-        desc(wins)
+        desc(wins),
+        desc(PF)
       ) %>% 
       filter(
         row_number() == 1
@@ -779,8 +913,8 @@ simulate_season = function(n){
     
     teams_tie_sd5 = po_seeds %>% 
       filter(
-        seed3 != 1, 
-        seed4 != 1
+        team != po_sd3, 
+        team != po_sd4
       ) %>% 
       arrange(
         desc(wins)
@@ -788,8 +922,8 @@ simulate_season = function(n){
       filter(
         row_number() %in% 1:(po_seeds %>% 
                                filter(
-                                 seed3 != 1, 
-                                 seed4 != 1
+                                 team != po_sd3, 
+                                 team != po_sd4
                                 ) %>% 
                                arrange(
                                  desc(wins)
@@ -809,8 +943,8 @@ simulate_season = function(n){
       left_join(
         sim_season %>% 
           filter(
-            team %in% teams_tie_4,
-            opponent %in% teams_tie_4
+            team %in% teams_tie_sd5,
+            opponent %in% teams_tie_sd5
           ) %>% 
           group_by(team) %>% 
           summarise(
@@ -824,8 +958,8 @@ simulate_season = function(n){
         desc(PF)
       ) %>%
       filter(
-        seed3 != 1, 
-        seed4 != 1
+        team != po_sd3, 
+        team != po_sd4
       ) %>%
       mutate(
         seed5 = ifelse(
@@ -837,8 +971,14 @@ simulate_season = function(n){
     
     po_seeds = left_join(
         po_seeds, 
-        po_sd5_tab
+        po_sd3_tab
       ) %>%
+      left_join(
+        po_sd4_tab
+      ) |>
+      left_join(
+        po_sd5_tab
+      ) |>
       suppressMessages() %>%
       mutate(
         seed6 = 1 - seed3 - seed4 - seed5
