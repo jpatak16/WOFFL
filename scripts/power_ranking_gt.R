@@ -932,8 +932,8 @@ SeasonGames <- AllGames |>
     score, team
   ) |>
   mutate(
-    ov_wins = row_number() - 1,
-    ov_losses = 10 - ov_wins,
+    ov_wins = rank(score, ties.method = "average") - 1,
+    ov_losses = n() - 1 - ov_wins, 
     .by = ov_wk
   ) |>
   arrange(ov_wk)
@@ -1024,20 +1024,34 @@ SG_stats <- SeasonGames |>
   ) |>
   mutate(
     win = ifelse(score > opponent_score, 1, 0),
-    loss = ifelse(score < opponent_score, 1, 0)
+    loss = ifelse(score < opponent_score, 1, 0),
+    tie = ifelse(score == opponent_score, 1, 0),
+    result = case_when(
+      score > opponent_score ~ 1,
+      opponent_score > score ~ 0,
+      score == opponent_score ~ .5
+    )
   ) |>
   summarise(
     wins = sum(win),
     losses = sum(loss),
+    ties = sum(tie),
     PPG = mean(score),
     scores = list(score),
-    ov_rec = paste0(sum(ov_wins), "-", sum(ov_losses)),
-    results = list(win),
+    ov_wins = floor(sum(ov_wins)),
+    ov_losses = floor(sum(ov_losses)),
+    results = list(result),
     .by = team
   ) |>
   rowwise() |>
   mutate(
-    results = list(c(results, rep(.5, 13-week)))
+    results = list(c(results, rep(.5, 13-week))),
+    ov_ties = 10*week - ov_wins - ov_losses,
+    ov_rec = ifelse(
+      ov_ties == 0,
+      paste0(ov_wins, "-", ov_losses),
+      paste0(ov_wins, "-", ov_losses, "-", ov_ties)
+    )
   )
 
 espn_teams <- fflr::league_teams(
@@ -1173,7 +1187,7 @@ rk11gg <- make_ggplot_po(11)
 # Format Table
 tab <- final |>
   arrange(
-    desc(champion), desc(fifth)
+    desc(champion), desc(fifth), eleventh
   ) |>
   mutate(
     po_odds_change = NA

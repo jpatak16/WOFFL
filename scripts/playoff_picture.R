@@ -15,10 +15,16 @@ SeasonGames <- read.csv(
     week, team, score, opponent, opponent_score
   ) |>
   mutate(
-    result = ifelse(score > opponent_score, 1, 0),
+    win = ifelse(score > opponent_score, 1, 0),
+    loss = ifelse(opponent_score > score, 1, 0),
+    tie = ifelse(score == opponent_score, 1, 0),
     score = ifelse(score==0, NA, score),
     opponent_score = ifelse(opponent_score==0, NA, opponent_score),
-    result = ifelse(is.na(score), NA, result)
+    result = case_when(
+      score > opponent_score ~ 1,
+      opponent_score > score ~ 0,
+      score == opponent_score ~ .5
+    )
   ) |>
   filter(
     !is.na(score)
@@ -27,8 +33,11 @@ SeasonGames <- read.csv(
 # Summarize current season to date
 season_sum <- SeasonGames |> 
   summarise(
-    wins = sum(result, na.rm = T), 
+    wins = sum(win, na.rm = T), 
+    losses = sum(loss, na.rm = T),
+    ties = sum(tie, na.rm = T),
     PF = sum(score, na.rm = T),
+    results = sum(result, na.rm = T),
     .by = team
   ) |>
   filter(
@@ -46,17 +55,17 @@ weeks_played <- SeasonGames |>
 # One Seed
 one_seed_n_wins <- season_sum |>
   arrange(
-    desc(wins)
+    desc(results)
   ) |>
-  pull(wins) |>
+  pull(results) |>
   max()
 
 teams_tie_1seed <- season_sum |> 
   arrange(
-    desc(wins)
+    desc(results)
   ) |>
   filter(
-    wins == one_seed_n_wins
+    results == one_seed_n_wins
   ) |> 
   pull(team)
 
@@ -68,34 +77,39 @@ one_seed_table <- season_sum |>
         opponent %in% teams_tie_1seed
       ) |>
       summarise(
-        tb_h2h_wins = sum(result, na.rm = T), 
+        tb_h2h_wins = sum(win, na.rm = T),
+        tb_h2h_losses = sum(loss, na.rm = T),
+        tb_h2h_ties = sum(tie, na.rm = T),
         tb_h2h_gp = n(),
         .by = team
-      ),
-    by = 'team'
+      )
   ) |>
   mutate(
     tb_h2h_wp = ifelse(
       is.na(tb_h2h_gp), 
       1, 
-      tb_h2h_wins / tb_h2h_gp
+      tb_h2h_wins+(.5*tb_h2h_ties) / tb_h2h_gp
     )
   ) |>
   arrange(
-    desc(wins), 
+    desc(results), 
     desc(tb_h2h_wp), 
     desc(PF)
   ) |>
   mutate(
-    losses = weeks_played - wins,
-    tb_h2h_losses = tb_h2h_gp - tb_h2h_wins,
-    tb_h2h_wins = ifelse(is.na(tb_h2h_wins), 0, tb_h2h_wins),
-    tb_h2h_losses = ifelse(is.na(tb_h2h_losses), 0, tb_h2h_losses),
-    record = paste0(wins, "-", losses),
-    tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)
+    record = ifelse(
+      ties > 0,
+      paste0(wins, "-", losses, "-", ties),
+      paste0(wins, "-", losses)
+    ),
+    tb_h2h_record = ifelse(
+      tb_h2h_ties > 0,
+      paste0(tb_h2h_wins, "-", tb_h2h_losses, "-", tb_h2h_ties),
+      paste0(tb_h2h_wins, "-", tb_h2h_losses)
+    )
   ) |>
   filter(
-    wins >= one_seed_n_wins-1
+    results >= one_seed_n_wins-1
   ) |>
   select(team, record, tb_h2h_record, PF)
 
@@ -126,7 +140,7 @@ two_seed_table <- season_sum |>
   filter(
     PF > two_seed_n_pf-100
   ) |>
-  select(-wins)
+  select(team, PF)
 
 qualified <- append(
     qualified,
@@ -142,7 +156,7 @@ three_seed_n_wins <- season_sum |>
   filter(
     team %notin% qualified
   ) |>
-  pull(wins) |>
+  pull(results) |>
   max()
 
 teams_tie_3seed <- season_sum |> 
@@ -150,10 +164,10 @@ teams_tie_3seed <- season_sum |>
     team %notin% qualified
   ) |>
   arrange(
-    desc(wins)
+    desc(results)
   ) |>
   filter(
-    wins == three_seed_n_wins
+    results == three_seed_n_wins
   ) |> 
   pull(team)
 
@@ -165,7 +179,9 @@ three_seed_table <- season_sum |>
         opponent %in% teams_tie_3seed
       ) |>
       summarise(
-        tb_h2h_wins = sum(result, na.rm = T), 
+        tb_h2h_wins = sum(win, na.rm = T),
+        tb_h2h_losses = sum(loss, na.rm = T),
+        tb_h2h_ties = sum(tie, na.rm = T),
         tb_h2h_gp = n(),
         .by = team
       ),
@@ -178,24 +194,28 @@ three_seed_table <- season_sum |>
     tb_h2h_wp = ifelse(
       is.na(tb_h2h_gp), 
       1, 
-      tb_h2h_wins / tb_h2h_gp
+      tb_h2h_wins+(.5*tb_h2h_ties) / tb_h2h_gp
     )
   ) |>
   arrange(
-    desc(wins), 
+    desc(results), 
     desc(tb_h2h_wp), 
     desc(PF)
   ) |>
   mutate(
-    losses = weeks_played - wins,
-    tb_h2h_losses = tb_h2h_gp - tb_h2h_wins,
-    tb_h2h_wins = ifelse(is.na(tb_h2h_wins), 0, tb_h2h_wins),
-    tb_h2h_losses = ifelse(is.na(tb_h2h_losses), 0, tb_h2h_losses),
-    record = paste0(wins, "-", losses),
-    tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)
+    record = ifelse(
+      ties > 0,
+      paste0(wins, "-", losses, "-", ties),
+      paste0(wins, "-", losses)
+    ),
+    tb_h2h_record = ifelse(
+      tb_h2h_ties > 0,
+      paste0(tb_h2h_wins, "-", tb_h2h_losses, "-", tb_h2h_ties),
+      paste0(tb_h2h_wins, "-", tb_h2h_losses)
+    )
   ) |>
   filter(
-    wins >= three_seed_n_wins-1
+    results >= three_seed_n_wins-1
   ) |>
   select(team, record, tb_h2h_record, PF)
 
@@ -213,7 +233,7 @@ four_seed_n_wins <- season_sum |>
   filter(
     team %notin% qualified
   ) |>
-  pull(wins) |>
+  pull(results) |>
   max()
 
 teams_tie_4seed <- season_sum |> 
@@ -221,10 +241,10 @@ teams_tie_4seed <- season_sum |>
     team %notin% qualified
   ) |>
   arrange(
-    desc(wins)
+    desc(results)
   ) |>
   filter(
-    wins == four_seed_n_wins
+    results == four_seed_n_wins
   ) |> 
   pull(team)
 
@@ -236,7 +256,9 @@ four_seed_table <- season_sum |>
         opponent %in% teams_tie_4seed
       ) |>
       summarise(
-        tb_h2h_wins = sum(result, na.rm = T), 
+        tb_h2h_wins = sum(win, na.rm = T),
+        tb_h2h_losses = sum(loss, na.rm = T),
+        tb_h2h_ties = sum(tie, na.rm = T),
         tb_h2h_gp = n(),
         .by = team
       ),
@@ -249,24 +271,28 @@ four_seed_table <- season_sum |>
     tb_h2h_wp = ifelse(
       is.na(tb_h2h_gp), 
       1, 
-      tb_h2h_wins / tb_h2h_gp
+      tb_h2h_wins+(.5*tb_h2h_ties) / tb_h2h_gp
     )
   ) |>
   arrange(
-    desc(wins), 
-    desc(tb_h2h_wp),
+    desc(results), 
+    desc(tb_h2h_wp), 
     desc(PF)
   ) |>
   mutate(
-    losses = weeks_played - wins,
-    tb_h2h_losses = tb_h2h_gp - tb_h2h_wins,
-    tb_h2h_wins = ifelse(is.na(tb_h2h_wins), 0, tb_h2h_wins),
-    tb_h2h_losses = ifelse(is.na(tb_h2h_losses), 0, tb_h2h_losses),
-    record = paste0(wins, "-", losses),
-    tb_h2h_record = paste0(tb_h2h_wins, "-", tb_h2h_losses)
+    record = ifelse(
+      ties > 0,
+      paste0(wins, "-", losses, "-", ties),
+      paste0(wins, "-", losses)
+    ),
+    tb_h2h_record = ifelse(
+      tb_h2h_ties > 0,
+      paste0(tb_h2h_wins, "-", tb_h2h_losses, "-", tb_h2h_ties),
+      paste0(tb_h2h_wins, "-", tb_h2h_losses)
+    )
   ) |>
   filter(
-    wins >= four_seed_n_wins-1
+    results >= four_seed_n_wins-1
   ) |>
   select(team, record, tb_h2h_record, PF)
 
@@ -290,7 +316,7 @@ five_seed_n_wins <- SeasonGames |>
     week >= 7
   ) |>
   summarise(
-    l7_wins = sum(result), 
+    l7_wins = sum(result),
     l7_PF = sum(score),
     .by = team
   ) |>
@@ -349,7 +375,7 @@ six_seed_table <- season_sum |>
   filter(
     PF > two_seed_n_pf-100
   ) |>
-  select(-wins)
+  select(team, PF)
 
 qualified <- append(
   qualified,
@@ -362,13 +388,219 @@ qualified <- append(
 
 
 # Reseed non-FRB teams
-qualified[3:6] <- season_sum |>
+reseed3_n_wins = season_sum %>% 
   filter(
     team %in% qualified[3:6]
   ) |>
   arrange(
-    desc(wins), 
+    desc(results),
     desc(PF)
+  ) %>% 
+  filter(
+    row_number() == 1
+  ) %>% 
+  select(results) %>% 
+  as.numeric()
+
+teams_tie_resd3 = season_sum %>% 
+  filter(
+    team %in% qualified[3:6]
+  ) |>
+  arrange(
+    desc(results)
+  ) %>% 
+  filter(
+    row_number() %in% 1:(season_sum %>% 
+                           arrange(
+                             desc(results)
+                           ) %>% 
+                           filter(
+                             results == reseed3_n_wins
+                           ) %>% 
+                           select(team) %>% 
+                           nrow()
+    )
+  ) %>% 
+  select(team) %>% 
+  as.vector() %>% 
+  unlist()
+
+po_resd3 = season_sum %>%
+  filter(
+    team %in% qualified[3:6]
+  ) %>%
+  left_join(
+    SeasonGames %>% 
+      filter(
+        team %in% teams_tie_resd3,
+        opponent %in% teams_tie_resd3
+      ) %>% 
+      group_by(team) %>% 
+      summarise(
+        tb_h2h_reseed3 = sum(result)
+      ),
+    by = 'team'
+  ) %>%
+  arrange(
+    desc(results), 
+    desc(tb_h2h_reseed3), 
+    desc(PF)
+  ) |>
+  filter(
+    row_number() == 1
+  ) |>
+  pull(team)
+
+reseed4_n_wins = season_sum %>% 
+  filter(
+    team %in% qualified[3:6],
+    team != po_resd3
+  ) |>
+  arrange(
+    desc(results),
+    desc(PF)
+  ) %>% 
+  filter(
+    row_number() == 1
+  ) %>% 
+  select(results) %>% 
+  as.numeric()
+
+teams_tie_resd4 = season_sum %>% 
+  filter(
+    team %in% qualified[3:6],
+    team != po_resd3
+  ) |>
+  arrange(
+    desc(results)
+  ) %>% 
+  filter(
+    row_number() %in% 1:(season_sum %>% 
+                           filter(
+                             team %in% qualified[3:6],
+                             team != po_resd3
+                           ) |>
+                           arrange(
+                             desc(results)
+                           ) %>% 
+                           filter(
+                             results == reseed4_n_wins
+                           ) %>% 
+                           select(team) %>% 
+                           nrow()
+    )
+  ) %>% 
+  select(team) %>% 
+  as.vector() %>% 
+  unlist()
+
+po_resd4 = season_sum %>%
+  filter(
+    team %in% qualified[3:6],
+    team != po_resd3
+  ) |>
+  left_join(
+    SeasonGames %>% 
+      filter(
+        team %in% teams_tie_resd4,
+        opponent %in% teams_tie_resd4
+      ) %>% 
+      group_by(team) %>% 
+      summarise(
+        tb_h2h_reseed4 = sum(result)
+      ),
+    by = 'team'
+  ) %>%
+  arrange(
+    desc(results), 
+    desc(tb_h2h_reseed4), 
+    desc(PF)
+  ) |>
+  filter(
+    row_number() == 1
+  ) |>
+  pull(team)
+
+reseed5_n_wins = season_sum %>% 
+  filter(
+    team %in% qualified[3:6],
+    team != po_resd3,
+    team != po_resd4
+  ) |>
+  arrange(
+    desc(results),
+    desc(PF)
+  ) %>% 
+  filter(
+    row_number() == 1
+  ) %>% 
+  select(results) %>% 
+  as.numeric()
+
+teams_tie_resd5 = season_sum %>% 
+  filter(
+    team %in% qualified[3:6],
+    team != po_resd3,
+    team != po_resd4
+  ) |>
+  arrange(
+    desc(results)
+  ) %>% 
+  filter(
+    row_number() %in% 1:(season_sum %>% 
+                           filter(
+                             team %in% qualified[3:6],
+                             team != po_resd3,
+                             team != po_resd4
+                           ) |>
+                           arrange(
+                             desc(results)
+                           ) %>% 
+                           filter(
+                             results == reseed5_n_wins
+                           ) %>% 
+                           select(team) %>% 
+                           nrow()
+    )
+  ) %>% 
+  select(team) %>% 
+  as.vector() %>% 
+  unlist()
+
+po_resd5 = season_sum %>%
+  filter(
+    team %in% qualified[3:6],
+    team != po_resd3,
+    team != po_resd4
+  ) |>
+  left_join(
+    SeasonGames %>% 
+      filter(
+        team %in% teams_tie_resd5,
+        opponent %in% teams_tie_resd5
+      ) %>% 
+      group_by(team) %>% 
+      summarise(
+        tb_h2h_reseed5 = sum(result)
+      ),
+    by = 'team'
+  ) %>%
+  arrange(
+    desc(results), 
+    desc(tb_h2h_reseed5), 
+    desc(PF)
+  ) |>
+  filter(
+    row_number() == 1
+  ) |>
+  pull(team)
+
+po_resd6 <- season_sum |>
+  filter(
+    team %in% qualified[3:6],
+    team != po_resd3,
+    team != po_resd4,
+    team != po_resd5
   ) |>
   pull(team)
 
@@ -431,6 +663,12 @@ table1 <- one_seed_table |>
     locations = cells_body(
       columns = team,
     )
+  ) |>
+  text_transform(
+    locations = cells_body(),
+    fn = function(x) {
+      ifelse(is.na(x), "", x)
+    }
   )
 
 table2 <- two_seed_table |>
@@ -486,6 +724,12 @@ table2 <- two_seed_table |>
     locations = cells_body(
       columns = team,
     )
+  ) |>
+  text_transform(
+    locations = cells_body(),
+    fn = function(x) {
+      ifelse(is.na(x), "", x)
+    }
   )
 
 table3 <- three_seed_table |>
@@ -545,6 +789,12 @@ table3 <- three_seed_table |>
     locations = cells_body(
       columns = team,
     )
+  ) |>
+  text_transform(
+    locations = cells_body(),
+    fn = function(x) {
+      ifelse(is.na(x), "", x)
+    }
   )
 
 table4 <- four_seed_table |>
@@ -604,6 +854,12 @@ table4 <- four_seed_table |>
     locations = cells_body(
       columns = team,
     )
+  ) |>
+  text_transform(
+    locations = cells_body(),
+    fn = function(x) {
+      ifelse(is.na(x), "", x)
+    }
   )
 
 table5 <- five_seed_table |>
@@ -662,6 +918,12 @@ table5 <- five_seed_table |>
     locations = cells_body(
       columns = team,
     )
+  ) |>
+  text_transform(
+    locations = cells_body(),
+    fn = function(x) {
+      ifelse(is.na(x), "", x)
+    }
   )
 
 
