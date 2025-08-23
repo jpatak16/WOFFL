@@ -2,3 +2,6 @@
 .Rhistory
 .RData
 .Ruserdata
+
+draft2025app/.env
+draft2025app/.secrets

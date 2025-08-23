@@ -1,0 +1,41 @@
+body, .container-fluid {
+  padding: 0;
+  margin: 0;
+}
+
+@font-face {
+  font-family: 'FugazOne';
+  src: url('FugazOne-Regular.ttf') format('truetype');
+}
+
+.header-bar {
+  width: 100%;
+  background-color: #580515;
+  padding: 10px 0;
+  border-bottom: 10px solid #4a4a4a;
+}
+
+.header-logo {
+  height: 20vh;
+  max-height: 100px;
+  display: block;
+  margin: 0 auto;
+  width: auto;
+}
+
+.header-subtitle {
+  text-align: center;
+  color: white;
+  font-size: 3vh;
+  font-family: 'FugazOne', sans-serif;
+  font-weight: bold;
+}
+
+.exchange-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: transparent;
+  color: white;
+  border: none;
+}
