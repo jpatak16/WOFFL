@@ -8,11 +8,30 @@ body, .container-fluid {
   src: url('FugazOne-Regular.ttf') format('truetype');
 }
 
+@font-face {
+  font-family: 'Orbitron';
+  src: url('Orbitron-VariableFont_wght.ttf') format('truetype');
+}
+
+body {
+  font-family: "Orbitron", sans-serif;
+}
+
 .header-bar {
   width: 100%;
   background-color: #580515;
   padding: 10px 0;
-  border-bottom: 10px solid #4a4a4a;
+}
+
+.nom-bar {
+  width: 100%;
+  background-color: #4a4a4a;
+  padding: 10px 10px;
+  display: block;
+  color: white;
+  box-sizing: border-box;
+  font-weight: "bold";
+  font-size: x-large;
 }
 
 .header-logo {
@@ -38,4 +57,11 @@ body, .container-fluid {
   background-color: transparent;
   color: white;
   border: none;
+}
+
+
+@media (max-width: 768px) {
+  .reactable{
+    width: 100% !important;
+  }
 }
