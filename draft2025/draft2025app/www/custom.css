@@ -50,28 +50,8 @@ body {
   font-weight: bold;
 }
 
-.exchange-button {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background-color: transparent;
-  color: white;
-  border: none;
-}
-
-
 @media (max-width: 768px) {
   .reactable{
     width: 100% !important;
   }
-}
-
-.private-fluid-ui {
-  padding-top: 40px;
-  padding-bottom: 40px;
-}
-
-.btn-default {
-  background-color: #d3d3d3;
-  color: #000;
 }
