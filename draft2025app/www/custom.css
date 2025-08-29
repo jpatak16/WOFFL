@@ -65,3 +65,13 @@ body {
     width: 100% !important;
   }
 }
+
+.private-fluid-ui {
+  padding-top: 40px;
+  padding-bottom: 40px;
+}
+
+.btn-default {
+  background-color: #d3d3d3;
+  color: #000;
+}

@@ -12,7 +12,6 @@ PASSWORD <- Sys.getenv("PASSWORD")
 # Google Sheets setup
 gs4_auth(cache = ".secrets", email = Sys.getenv("GSHEET_EMAIL"))
 sheet_id <- Sys.getenv("GSHEET_ID")
-df <- read_sheet(sheet_id)
 
 # Team names
 teams <- c(
@@ -28,65 +27,6 @@ teams <- c(
   "Daniel Potichko",
   "Seth Lassiter"
   )
-
-# Create public table
-public_df <- df |>
-  arrange(NomOrder) |>
-  select(NomOrder, Player, Pos, NFLteam, WOFFLteam, value) |>
-  filter(!is.na(WOFFLteam))
-
-# Available Players
-available_players = df |>
-  filter(
-    is.na(NomOrder),
-    Rank != "NOM"
-  ) |>
-  pull(Player)
-
-available_players = c("", available_players)
-
-# Create team summary table
-team_summary <- public_df |>
-  summarise(
-    players_rostered = n(),
-    budget_spent = sum(value),
-    .by = WOFFLteam
-  ) |>
-  mutate(
-    budget_remaining = 200 - budget_spent,
-    max_bid = budget_remaining - (15 - players_rostered - 1)
-  )
-
-team_summary <- tibble(WOFFLteam = teams) |>
-  left_join(team_summary, by = "WOFFLteam") |>
-  mutate(
-    players_rostered = coalesce(players_rostered, 0),
-    budget_remaining = coalesce(budget_remaining, 200),
-    budget_spent = coalesce(budget_spent, 0),
-    max_bid = coalesce(max_bid, 186)
-  ) |>
-  arrange(desc(players_rostered), budget_remaining)
-
-current_nom <- df |>
-  filter(Rank == "NOM") |>
-  mutate(
-    Player = ifelse(is.na(Player), "TBD", Player)
-  ) |>
-  pull(Player)
-
-current_nom_pos <- df |>
-  filter(Rank == "NOM") |>
-  mutate(
-    Player = ifelse(is.na(Player), "TBD", Player)
-  ) |>
-  pull(Pos)
-
-current_nom_tm <- df |>
-  filter(Rank == "NOM") |>
-  mutate(
-    Player = ifelse(is.na(Player), "TBD", Player)
-  ) |>
-  pull(NFLteam)
 
 # UI for each page we will switch between
 page_public <- fluidPage(
@@ -140,17 +80,7 @@ ui <- fluidPage(
     )
   ),
   
-  #Current Nom bar
-  tags$div(
-    class = "nom-bar",
-    HTML(
-      paste0(
-        "Current Nomination:<br>", 
-        current_nom, 
-        "<br>", current_nom_pos, ", ", current_nom_tm
-      )
-    ) 
-  ),
+  uiOutput("currentNomInfo"),
   
   
   uiOutput("page_ui")
@@ -158,6 +88,111 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
+  
+  df <- reactive({read_sheet(sheet_id)})
+  
+  # Create a df to reference that doesn't have NOM row in it
+  NOMless_df <- reactive({
+    df() |>
+      filter(Rank != "NOM")
+  }) 
+  
+  # Create public table
+  public_df <- reactive({
+    df() |>
+      arrange(desc(NomOrder)) |>
+      select(NomOrder, Player, Pos, NFLteam, WOFFLteam, value) |>
+      filter(!is.na(WOFFLteam))
+  })
+  
+  # Available Players
+  available_players = reactive({
+    df() |>
+      filter(
+        is.na(NomOrder),
+        Rank != "NOM"
+      ) |>
+      pull(Player)
+  })
+  
+  available_players2 = reactive({
+    c("", available_players())
+  })
+  
+  # Create team summary table
+  team_summary_prep <- reactive({
+    public_df() |>
+      summarise(
+        players_rostered = n(),
+        budget_spent = sum(value),
+        .by = WOFFLteam
+      ) |>
+      mutate(
+        budget_remaining = 200 - budget_spent,
+        max_bid = budget_remaining - (15 - players_rostered - 1)
+      )
+  })
+    
+  team_summary <- reactive({
+    tibble(WOFFLteam = teams) |>
+      left_join(team_summary_prep(), by = "WOFFLteam") |>
+      mutate(
+        players_rostered = coalesce(players_rostered, 0),
+        budget_remaining = coalesce(budget_remaining, 200),
+        budget_spent = coalesce(budget_spent, 0),
+        max_bid = coalesce(max_bid, 186)
+      ) |>
+      arrange(desc(players_rostered), budget_remaining)
+  })
+    
+  
+  maxNomOrder <- reactive({
+    public_df() |>
+      summarize(
+        NomOrder = max(NomOrder)
+      ) |>
+      pull(NomOrder)
+  })
+  
+  current_nom <- reactive({
+    df() |>
+      filter(Rank == "NOM") |>
+      mutate(
+        Player = ifelse(is.na(Player), "TBD", Player)
+      ) |>
+      pull(Player)
+  })
+  
+  current_nom_pos <- reactive({
+    df() |>
+      filter(Rank == "NOM") |>
+      mutate(
+        Player = ifelse(is.na(Player), "TBD", Player)
+      ) |>
+      pull(Pos)
+  })
+  
+  current_nom_tm <- reactive({
+    df() |>
+      filter(Rank == "NOM") |>
+      mutate(
+        Player = ifelse(is.na(Player), "TBD", Player)
+      ) |>
+      pull(NFLteam)
+  })
+  
+  output$currentNomInfo <- renderUI({
+    tags$div(
+      class = "nom-bar",
+      HTML(
+        paste0(
+          "Current Nomination:<br>", 
+          current_nom(), 
+          "<br>", current_nom_pos(), ", ", current_nom_tm()
+        )
+      )
+    )
+  })
   
   current_page <- reactiveVal("public")
   
@@ -175,7 +210,7 @@ server <- function(input, output, session) {
   
   output$public_table <- renderReactable({
     reactable(
-      public_df,
+      public_df(),
       defaultColDef = colDef(
         align = "center",
         headerStyle = list(background = "#ceced4")
@@ -206,38 +241,38 @@ server <- function(input, output, session) {
           name = "NFL Team",
           cell = function(value) {
             logos <- list(
-              ARI = "https://a.espncdn.com/i/teamlogos/nfl/500/ari.png",
-              ATL = "https://a.espncdn.com/i/teamlogos/nfl/500/atl.png",
-              BAL = "https://a.espncdn.com/i/teamlogos/nfl/500/bal.png",
-              BUF = "https://a.espncdn.com/i/teamlogos/nfl/500/buf.png",
-              CAR = "https://a.espncdn.com/i/teamlogos/nfl/500/car.png",
-              CHI = "https://a.espncdn.com/i/teamlogos/nfl/500/chi.png",
-              CIN = "https://a.espncdn.com/i/teamlogos/nfl/500/cin.png",
-              CLE = "https://a.espncdn.com/i/teamlogos/nfl/500/cle.png",
-              DAL = "https://a.espncdn.com/i/teamlogos/nfl/500/dal.png",
-              DEN = "https://a.espncdn.com/i/teamlogos/nfl/500/den.png",
-              DET = "https://a.espncdn.com/i/teamlogos/nfl/500/det.png",
-              GB  = "https://a.espncdn.com/i/teamlogos/nfl/500/gb.png",
-              HOU = "https://a.espncdn.com/i/teamlogos/nfl/500/hou.png",
-              IND = "https://a.espncdn.com/i/teamlogos/nfl/500/ind.png",
-              JAX = "https://a.espncdn.com/i/teamlogos/nfl/500/jax.png",
-              KC  = "https://a.espncdn.com/i/teamlogos/nfl/500/kc.png",
-              LV  = "https://a.espncdn.com/i/teamlogos/nfl/500/lv.png",
-              LAC = "https://a.espncdn.com/i/teamlogos/nfl/500/lac.png",
-              LAR = "https://a.espncdn.com/i/teamlogos/nfl/500/lar.png",
-              MIA = "https://a.espncdn.com/i/teamlogos/nfl/500/mia.png",
-              MIN = "https://a.espncdn.com/i/teamlogos/nfl/500/min.png",
-              NE  = "https://a.espncdn.com/i/teamlogos/nfl/500/ne.png",
-              NO  = "https://a.espncdn.com/i/teamlogos/nfl/500/no.png",
-              NYG = "https://a.espncdn.com/i/teamlogos/nfl/500/nyg.png",
-              NYJ = "https://a.espncdn.com/i/teamlogos/nfl/500/nyj.png",
-              PHI = "https://a.espncdn.com/i/teamlogos/nfl/500/phi.png",
-              PIT = "https://a.espncdn.com/i/teamlogos/nfl/500/pit.png",
-              SF  = "https://a.espncdn.com/i/teamlogos/nfl/500/sf.png",
-              SEA = "https://a.espncdn.com/i/teamlogos/nfl/500/sea.png",
-              TB  = "https://a.espncdn.com/i/teamlogos/nfl/500/tb.png",
-              TEN = "https://a.espncdn.com/i/teamlogos/nfl/500/ten.png",
-              WAS = "https://a.espncdn.com/i/teamlogos/nfl/500/wsh.png"
+              Cardinals = "https://a.espncdn.com/i/teamlogos/nfl/500/ari.png",
+              Falcons = "https://a.espncdn.com/i/teamlogos/nfl/500/atl.png",
+              Ravens = "https://a.espncdn.com/i/teamlogos/nfl/500/bal.png",
+              Bills = "https://a.espncdn.com/i/teamlogos/nfl/500/buf.png",
+              Panthers = "https://a.espncdn.com/i/teamlogos/nfl/500/car.png",
+              Bears = "https://a.espncdn.com/i/teamlogos/nfl/500/chi.png",
+              Bengals = "https://a.espncdn.com/i/teamlogos/nfl/500/cin.png",
+              Browns = "https://a.espncdn.com/i/teamlogos/nfl/500/cle.png",
+              Cowboys = "https://a.espncdn.com/i/teamlogos/nfl/500/dal.png",
+              Broncos = "https://a.espncdn.com/i/teamlogos/nfl/500/den.png",
+              Lions = "https://a.espncdn.com/i/teamlogos/nfl/500/det.png",
+              Packers  = "https://a.espncdn.com/i/teamlogos/nfl/500/gb.png",
+              Texans = "https://a.espncdn.com/i/teamlogos/nfl/500/hou.png",
+              Colts = "https://a.espncdn.com/i/teamlogos/nfl/500/ind.png",
+              Jaguars = "https://a.espncdn.com/i/teamlogos/nfl/500/jax.png",
+              Chiefs  = "https://a.espncdn.com/i/teamlogos/nfl/500/kc.png",
+              Raiders  = "https://a.espncdn.com/i/teamlogos/nfl/500/lv.png",
+              Chargers = "https://a.espncdn.com/i/teamlogos/nfl/500/lac.png",
+              Rams = "https://a.espncdn.com/i/teamlogos/nfl/500/lar.png",
+              Dolphins = "https://a.espncdn.com/i/teamlogos/nfl/500/mia.png",
+              Vikings = "https://a.espncdn.com/i/teamlogos/nfl/500/min.png",
+              Patriots  = "https://a.espncdn.com/i/teamlogos/nfl/500/ne.png",
+              Saints  = "https://a.espncdn.com/i/teamlogos/nfl/500/no.png",
+              Giants = "https://a.espncdn.com/i/teamlogos/nfl/500/nyg.png",
+              Jets = "https://a.espncdn.com/i/teamlogos/nfl/500/nyj.png",
+              Eagles = "https://a.espncdn.com/i/teamlogos/nfl/500/phi.png",
+              Steelers = "https://a.espncdn.com/i/teamlogos/nfl/500/pit.png",
+              '49ers'  = "https://a.espncdn.com/i/teamlogos/nfl/500/sf.png",
+              Seahawks = "https://a.espncdn.com/i/teamlogos/nfl/500/sea.png",
+              Buccaneers  = "https://a.espncdn.com/i/teamlogos/nfl/500/tb.png",
+              Titans = "https://a.espncdn.com/i/teamlogos/nfl/500/ten.png",
+              Commanders = "https://a.espncdn.com/i/teamlogos/nfl/500/wsh.png"
             )
             
             if (!is.null(logos[[value]])) {
@@ -294,7 +329,7 @@ server <- function(input, output, session) {
   
   output$team_summary <- renderReactable({
     reactable(
-      team_summary,
+      team_summary(),
       defaultColDef = colDef(
         align = "center",
         headerStyle = list(background = "black",
@@ -325,18 +360,47 @@ server <- function(input, output, session) {
   output$left_protected_ui <- renderUI({
     req(input$password_box)
     if (input$password_box == PASSWORD) {
-      fluidRow(
-        column(
-          6,
-          selectInput(
-            "nominatedPlayer", 
-            "Nominated Player", 
-            choices = available_players
+      div(
+        fluidRow(
+          class = "private-fluid-ui",
+          column(
+            6,
+            selectInput(
+              "nominatedPlayer", 
+              "Nominated Player", 
+              choices = available_players2()
+            )
+          ),
+          column(
+            6,
+            actionButton("submitNom", "Nominate Player") 
           )
         ),
-        column(
-          6,
-          actionButton("submitNom", "Nominate Player") 
+        fluidRow(
+          class = "private-fluid-ui",
+          column(
+            8,
+            selectInput(
+              "winningTeam",
+              "Winning Team",
+              choices = teams
+            )
+          ),
+          column(
+            2,
+            numericInput(
+              "winningBid",
+              "Winning Bid",
+              value = 1, min = 1, max = 200
+            )
+          ),
+          column(
+            2, 
+            actionButton(
+              "submitBid",
+              "Submit"
+            )
+          )
         )
       )
     }
@@ -355,20 +419,64 @@ server <- function(input, output, session) {
     nominated_player <- input$nominatedPlayer
     
     # Info to write into NOM row
-    player_info <- df |> 
+    player_info <- df() |> 
       filter(Player == nominated_player) |>
       select(-Rank)
     
     # Determine which row to overwrite
-    row_index <- which(df$Rank == "NOM")
+    nom_player_row <- which(df()$Rank == "NOM")
     
     # Write Nominated player into the sheet
     googlesheets4::range_write(
       ss = sheet_id,
       data = player_info,
-      range = paste0("B", row_index),
+      range = paste0("B", nom_player_row),
       col_names = TRUE
     )
+    
+    session$reload()
+    
+  })
+  
+  observeEvent(input$submitBid, {
+    
+    # Determine which row to overwrite
+    sold_player_row <- which(NOMless_df()$Player == current_nom()) + 1
+    
+    # Info to write
+    sold_player_info <- NOMless_df() |> 
+      filter(Player == current_nom()) |>
+      mutate(
+        WOFFLteam = input$winningTeam,
+        value = input$winningBid,
+        NomOrder = maxNomOrder() + 1
+      )
+    
+    # Write Nominated player into the sheet
+    googlesheets4::range_write(
+      ss = sheet_id,
+      data = sold_player_info,
+      range = paste0("A", sold_player_row + 1),
+      col_names = FALSE
+    )
+    
+    # Clear the nom row
+    nom_player_row <- which(df()$Rank == "NOM")
+    empty_nom <- data.frame(
+      Rank = "NOM",
+      Player = "",
+      Pos = "",
+      NFLteam = ""
+    )
+    googlesheets4::range_write(
+      ss = sheet_id,
+      data = empty_nom,
+      range = paste0("A", nom_player_row),
+      col_names = TRUE
+    )
+    
+    
+    session$reload()
     
   })
 
