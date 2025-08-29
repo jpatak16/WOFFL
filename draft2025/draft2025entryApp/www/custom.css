@@ -1,0 +1,68 @@
+body, .container-fluid {
+  padding: 0;
+  margin: 5px;
+}
+
+@font-face {
+  font-family: 'FugazOne';
+  src: url('FugazOne-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Orbitron';
+  src: url('Orbitron-VariableFont_wght.ttf') format('truetype');
+}
+
+body {
+  font-family: "Orbitron", sans-serif;
+}
+
+.header-bar {
+  width: 100%;
+  background-color: #580515;
+  padding: 10px 0;
+}
+
+.nom-bar {
+  width: 100%;
+  background-color: #4a4a4a;
+  padding: 10px 10px;
+  display: block;
+  color: white;
+  box-sizing: border-box;
+  font-weight: "bold";
+  font-size: x-large;
+}
+
+.header-logo {
+  height: 20vh;
+  max-height: 100px;
+  display: block;
+  margin: 0 auto;
+  width: auto;
+}
+
+.header-subtitle {
+  text-align: center;
+  color: white;
+  font-size: 3vh;
+  font-family: 'FugazOne', sans-serif;
+  font-weight: bold;
+}
+
+
+@media (max-width: 768px) {
+  .reactable{
+    width: 100% !important;
+  }
+}
+
+.private-fluid-ui {
+  padding-top: 40px;
+  padding-bottom: 40px;
+}
+
+.btn-default {
+  background-color: #d3d3d3;
+  color: #000;
+}
