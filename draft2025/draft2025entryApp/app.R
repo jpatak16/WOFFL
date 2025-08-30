@@ -45,12 +45,12 @@ ui <- fluidPage(
   # content
   fluidRow(
     column(
-      width = 6,
+      width = 5,
       class = "col-md-6",
       uiOutput("left_protected_ui")
     ),
     column(
-      width = 6,
+      width = 7,
       class = "col-md-6",
       uiOutput("right_protected_ui")
     ),
@@ -70,17 +70,17 @@ server <- function(input, output, session) {
   
   # Create public table
   public_df <- reactive({
-    df() |>
+    NOMless_df() |>
+      filter(!is.na(WOFFLteam)) |>
       arrange(desc(NomOrder)) |>
-      select(NomOrder, Player, Pos, NFLteam, WOFFLteam, value) |>
-      filter(!is.na(WOFFLteam))
+      select(NomOrder, Player, Pos, NFLteam, WOFFLteam, value)
   })
   
   # Available Players
   available_players = reactive({
     df() |>
       filter(
-        is.na(NomOrder),
+        NomOrder == "NULL",
         Rank != "NOM"
       ) |>
       pull(Player)
@@ -119,6 +119,7 @@ server <- function(input, output, session) {
   
   maxNomOrder <- reactive({
     public_df() |>
+      mutate(NomOrder = as.numeric(NomOrder)) |>
       summarize(
         NomOrder = max(NomOrder)
       ) |>
@@ -222,20 +223,17 @@ server <- function(input, output, session) {
           )
         ),
         column(
-          2,
+          4,
           numericInput(
             "winningBid",
             "Winning Bid",
             value = 1, min = 1, max = 200
           )
-        ),
-        column(
-          2, 
-          actionButton(
-            "submitBid",
-            "Submit"
-          )
         )
+      ),
+      fluidRow(
+        column(8),
+        column(4, actionButton("submitBid", "Submit"))
       )
     )
   })
@@ -263,6 +261,14 @@ server <- function(input, output, session) {
       data = player_info,
       range = paste0("B", nom_player_row),
       col_names = TRUE
+    )
+    
+    # Change last sheet update time
+    googlesheets4::range_write(
+      ss = sheet_id,
+      data = data.frame(Sys.time()),
+      range = paste0("G", 2),
+      col_names = FALSE
     )
     
     session$reload()
@@ -306,6 +312,13 @@ server <- function(input, output, session) {
       col_names = TRUE
     )
     
+    # Change last sheet update time
+    googlesheets4::range_write(
+      ss = sheet_id,
+      data = data.frame(Sys.time()),
+      range = paste0("G", 2),
+      col_names = FALSE
+    )
     
     session$reload()
     

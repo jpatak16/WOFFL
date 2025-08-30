@@ -59,7 +59,15 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   
-  df <- reactive({read_sheet(sheet_id)})
+  check_update <- function() {
+    read_sheet(sheet_id, range = "G2", col_names = FALSE)[[1,1]]
+  }
+  
+  read_df <- function() {
+    read_sheet(sheet_id)
+  }
+  
+  df <- reactivePoll(5000, session, check_update, read_df)
   
   # Create public table
   public_df <- reactive({
