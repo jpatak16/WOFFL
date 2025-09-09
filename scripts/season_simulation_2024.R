@@ -4,7 +4,7 @@ p_load(dplyr, readxl, janitor, tidyr)
 runs = 20000
 
 #create variable for season we want to simulate the rest of
-CS = 2024
+CS = 2025
 #import data sets
 SeasonGames = read.csv(
     "WOFFL_stats_portal/AllGames.csv"
@@ -1753,7 +1753,7 @@ simulated_season_results <- simulated_season_results |>
     wk, .after = last_col()
   )
 
-path_out = "C:/Users/jerem/Documents/Fantasy/WOFFL/WOFFL_stats_portal/sim_results/sim_results_2024.csv"
+path_out = "C:/Users/jerem/Documents/Fantasy/WOFFL/WOFFL_stats_portal/sim_results/sim_results_2025.csv"
 read.csv(path_out) %>% 
   rbind(simulated_season_results) %>% 
   write.csv(path_out, row.names = F)

@@ -918,7 +918,7 @@ gt_plt_bar_stack_4 <- function(gt_object, column = NULL, palette = c("#e6e6e6", 
 setwd("~/Fantasy/WOFFL")
 
 # Import Season Info
-szn = 2024
+szn = 2025
 
 AllGames <- read.csv("WOFFL_stats_portal/AllGames.csv")
 
@@ -948,7 +948,7 @@ week = SeasonGames %>%
   as.numeric()
 
 # Import Simulation Results
-sim_res <- read.csv("WOFFL_stats_portal/sim_results/sim_results_2024.csv")
+sim_res <- read.csv("WOFFL_stats_portal/sim_results/sim_results_2025.csv")
 
 cur_wk_sim_res <- sim_res |>
   filter(
@@ -1406,7 +1406,7 @@ tab <- final |>
   )
 
 
-setwd("~/Fantasy/2024/power_rankings")
+setwd("~/Fantasy/2025/power_rankings")
 
 gtsave(
     tab,
