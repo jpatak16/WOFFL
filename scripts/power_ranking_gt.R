@@ -28,7 +28,7 @@ gt_merge_stack_delta <- function(gt_object, col1, col2, ..., small_cap = TRUE,
         
         glue::glue(
           "<div style='line-height:{font_size[1]}'><span style='font-weight:{font_weight[1]};font-variant:{font_variant};color:{'black'};font-size:{font_size[1]}'>{x}</span></div>
-        <div style='line-height:{font_size[2]}'><span style ='font-weight:{font_weight[2]};color:{case_when(grepl('+', data_in, fixed=T) ~ '#1b7837', grepl('-', data_in, fixed=T) ~ 'darkred')};font-size:{font_size[2]}'>{data_in}</span></div>"
+        <div style='line-height:{font_size[2]}'><span style ='font-weight:{font_weight[2]};color:{case_when(grepl('+', data_in, fixed=T) ~ '#00FF00', grepl('-', data_in, fixed=T) ~ '#FF0000')};font-size:{font_size[2]}'>{data_in}</span></div>"
         )
       }
     ) %>%
@@ -434,7 +434,7 @@ gt_merge_stack_with_density <- function(gt_object, col1, col4, palette = "black"
                                }) %>% 
     cols_hide(columns = c({{col4}}))}
 
-gt_plt_bar_stack_4 <- function(gt_object, column = NULL, palette = c("#e6e6e6", "darkred", "#1b7837", "#e6e6e6"),
+gt_plt_bar_stack_4 <- function(gt_object, column = NULL, palette = c("#e6e6e6", "#FF0000", "#00FF00", "#e6e6e6"),
                              labels = c("", "Group 2", "Group 3", ""),
                              position = "fill",
                              width = 70,
@@ -1054,26 +1054,46 @@ SG_stats <- SeasonGames |>
     )
   )
 
-espn_teams <- fflr::league_teams(
-    leagueId = "313259"
+url <- paste0(
+  "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/2025",
+  "/segments/0/leagues/313259?view=mTeam"
+)
+
+cookies <- c(
+  SWID = "{780D330C-0C45-4E49-9141-C0536FAEAD3B}",
+  espn_s2 = "AEAJq4rQkF4rLJZHg+eERhAPUJPJ8Akyr7zTRVPgz0JnfLU4kysF/VLY2g5FhI8mNPO4eMahVpU8uDgKMPj/7Jn4E5PR+6OYLYEjULbYZngvEtgGI31MxqfHIlm+OobR82CY96NbvrmmyMiERjrhMLYbAh1YHyHGN1XBZbUghlg8vHY4s2rVoE6btFh1ZZOmVoiPiRbYntszZQwDPXEkVrWIO/xtVJRsk8poUaJ5HWodIFbCGOootVo4B+o31UCo8S4M7vrtnmIGSJlYbq12iccS"
+)
+
+res = httr::GET(url, httr::set_cookies(.cookies = cookies))
+
+res2 = httr::content(res, "parsed", simplifyVector = TRUE)
+
+espn_teams = res2$teams |>
+  select(
+    id, name, abbrev, logo
   ) |>
   mutate(team = case_when(
-      teamId == 1 ~ "Jeremy Patak",
-      teamId == 2 ~ "Austin Iske",
-      teamId == 3 ~ "Brody Morgan",
-      teamId == 4 ~ "Dax Davis",
-      teamId == 5 ~ "Landry Sheridan",
-      teamId == 6 ~ "Stone Palmer",
-      teamId == 7 ~ "Seth Lassiter",
-      teamId == 8 ~ "Nick McFarland",
-      teamId == 9 ~ "Nike Simmons",
-      teamId == 10 ~ "Daniel Potichko",
-      teamId == 11 ~ "Cade Palmer",
+      id == 1 ~ "Jeremy Patak",
+      id == 2 ~ "Austin Iske",
+      id == 3 ~ "Brody Morgan",
+      id == 4 ~ "Dax Davis",
+      id == 5 ~ "Landry Sheridan",
+      id == 6 ~ "Stone Palmer",
+      id == 7 ~ "Seth Lassiter",
+      id == 8 ~ "Nick McFarland",
+      id == 9 ~ "Nike Simmons",
+      id == 10 ~ "Daniel Potichko",
+      id == 11 ~ "Cade Palmer",
       .default = "Error"
     )
   ) |>
+  mutate(
+    logo = as.character(logo),
+    logo = ifelse(id == 1, "https://customstickershop.us/wp-content/uploads/2019/01/Poop-Emoji-Decal-Sticker.jpg", logo),
+    logo = ifelse(id == 4, "https://i.imgur.com/smlsOkB.png", logo)
+  ) |>
   select(
-    team, name, abbrev, logo
+    -id
   )
 
 final <- SG_stats |>
@@ -1139,10 +1159,10 @@ make_ggplot_po <- function(x){
         group = team
       )
     ) +
-    geom_col(aes(x = 1), position = "stack", color = "#e6e6e6", fill = "#e6e6e6", width = 1) +
-    geom_col(aes(x = win_po), position = "stack", color = "#1b7837", fill = "#1b7837", width = 1) +
-    geom_col(aes(x = po_curr), position = "stack", color = "darkred", fill = "darkred", width = 1) +
-    geom_col(aes(x = lose_po), position = "stack", color = "#e6e6e6", fill = "#e6e6e6", width = 1) +
+    geom_col(aes(x = 1), position = "stack", color = "#505050", fill = "#505050", width = 1) +
+    geom_col(aes(x = win_po), position = "stack", color = "#00FF00", fill = "#00FF00", width = 1) +
+    geom_col(aes(x = po_curr), position = "stack", color = "#FF0000", fill = "#FF0000", width = 1) +
+    geom_col(aes(x = lose_po), position = "stack", color = "#505050", fill = "#505050", width = 1) +
     scale_x_continuous(
       expand = expansion(mult = c(0, 0)),
       limits = c(-.4, 1.4)
@@ -1158,7 +1178,7 @@ make_ggplot_po <- function(x){
       label = paste0(round(final$win_po[[x]]*100 - final$po_curr[[x]]*100, 0), "%"),
       size = 55,
       fontface = 2,
-      color = "#1b7837"
+      color = "#00FF00"
     ) +
     annotate(
       "text", 
@@ -1167,7 +1187,7 @@ make_ggplot_po <- function(x){
       label = paste0(round(final$po_curr[[x]]*100 - final$lose_po[[x]]*100, 0), "%"),
       size = 55,
       fontface = 2, 
-      color = "darkred"
+      color = "#FF0000"
     )
   )
 }
@@ -1200,20 +1220,14 @@ tab <- final |>
     win_nxt_game, opponent, po_odds_change
   ) |>
   gt() |>
-  tab_style(
-    style = list(cell_text(weight = "bold")),
-    locations = cells_body(
-      columns = rank,
-    )
-  ) |>
   gt_fa_rank_change(
     delta_rank, 
-    palette = c("#1b7837", "#ffffff", "darkred"),
+    palette = c("#00FF00", "#ffffff", "#FF0000"),
     show_text = FALSE, 
     fa_type = "caret"
   ) |>
   gt_img_rows(logo, height = 50) |>
-  gt_merge_stack(name, team) |>
+  gt_merge_stack(name, team, palette = c('grey', "#A63E4A")) |>
   gt_merge_stack_with_density(
     PPG, scores,
     width = 15,
@@ -1251,7 +1265,7 @@ tab <- final |>
     "Probability of Earning:",
     columns = c(playoffs, frb)
   ) |>
-  gt_merge_stack(win_nxt_game, opponent) |>
+  gt_merge_stack(win_nxt_game, opponent, palette = c('grey', "#A63E4A")) |>
   text_transform(
     locations = cells_body(columns = po_odds_change, rows = rank==1),
     fn = function(x){
@@ -1333,26 +1347,36 @@ tab <- final |>
     paste0("Week ", week+1, " Impact"),
     columns = c(win_nxt_game, po_odds_change)
   ) |>
-  gt_theme_pl() |>
+  gt_theme_tier() |>
   tab_style(
-    style = list(cell_fill(color = "#f5f5f5")),
+    style = list(cell_fill(color = "#404040")),
     locations = cells_body(
       columns = c(PPG, ov_rec, playoffs, frb)
     )
   ) |>
   tab_style(
-    style = cell_text(size = px(11)),
-    locations = cells_column_labels(c(ov_rec, playoffs, po_odds_change))
+    style = cell_text(size = px(11), color = "#A63E4A"),
+    locations = cells_column_labels(c(ov_rec, playoffs, po_odds_change, name))
   ) |>
   tab_style(
-    style = cell_text(size = px(9)),
+    style = cell_text(size = px(9), color = "#A63E4A"),
     locations = cells_column_labels(c(fifth, win_nxt_game))
   ) |>
   tab_style(
-    style = cell_text(align = "center"),
+    style = cell_text(align = "center", color = "#A63E4A"),
     locations = cells_column_labels(
       c(PPG, ov_rec, champion, fifth, eleventh, playoffs, frb, win_nxt_game)
     )
+  ) |>
+  tab_style(
+    style = cell_borders(sides = c("top", "bottom"), color = "#580515"),
+    locations = cells_body()
+  ) |>
+  tab_style(
+    style = list(
+      cell_text(color = "#580515")
+    ),
+    locations = cells_column_spanners()
   ) |>
   cols_align(
     align = c("center"),
@@ -1362,7 +1386,7 @@ tab <- final |>
     rank ~ px(20),
     delta_rank ~ px(20),
     logo ~ px(50),
-    name ~ px(115),
+    name ~ px(125),
     PPG ~ px(80),
     ov_rec ~ px(85),
     champion ~ px(70),
@@ -1398,11 +1422,14 @@ tab <- final |>
   ) |>
   tab_header(
     subtitle = paste0("Week ", week, " Power Rankings"),
-    title = md("<div><img src='https://i.ibb.co/fSTLLVQ/BlackPNG.png' style='height:100px;'></div>")
+    title = md("<div><img src='https://i.imgur.com/735e00C.png' style='height:100px;'></div>")
   ) |>
   tab_options(
     heading.align = "center",
-    heading.subtitle.font.size = px(30)
+    heading.subtitle.font.size = px(30),
+    table.background.color = "#303030",
+    table.font.color = "white",
+    column_labels.background.color = "#505050"
   )
 
 
